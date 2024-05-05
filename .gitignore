@@ -1,0 +1,6 @@
+logstash-*/jdk
+logstash-*/modules
+logstash-*/bin
+logstash-*/logstash-core
+logstash-*/logs
+logstash-*/vendor
