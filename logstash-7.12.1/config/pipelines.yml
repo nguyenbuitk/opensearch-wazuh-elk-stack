@@ -84,3 +84,10 @@
 #   Default is path.data/dead_letter_queue
 #
 #   path.dead_letter_queue:
+
+- pipeline.id: access_logs
+  path.config: "/home/ubuntu/elk/logstash-7.12.1/config/pipelines/access.conf"
+
+- pipeline.id: error_logs
+  pipeline.batch.size: 1
+  path.config: "/home/ubuntu/elk/logstash-7.12.1/config/pipelines/error.conf"

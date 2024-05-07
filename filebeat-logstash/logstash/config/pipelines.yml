@@ -1,0 +1,2 @@
+- pipeline.id: access_logs
+  path.config: "/home/ubuntu/elk/filebeat-logstash/logstash/config/pipelines/access.conf"
