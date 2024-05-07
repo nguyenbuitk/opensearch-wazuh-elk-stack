@@ -1,0 +1,113 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wazuh.fullname" . }}-kibana
+  labels:
+    app: {{ include "wazuh.fullname" . }}-kibana
+    {{- include "wazuh.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount.kibana }}
+
+  selector:
+    matchLabels:
+      app: {{ include "wazuh.fullname" . }}-kibana
+      {{- include "wazuh.selectorLabels" . | nindent 6 }}
+
+  template:
+    metadata:
+      annotations:
+        checksum/kibana-yaml: {{ include (print $.Template.BasePath "/kibana-cfm.yaml") . | sha256sum }}
+        checksum/elasticsearch-secret-yaml: {{ include (print $.Template.BasePath "/elasticsearch-secret.yaml") . | sha256sum }}
+        checksum/wazuh-secret-yaml: {{ include (print $.Template.BasePath "/wazuh-secret.yaml") . | sha256sum }}
+      labels:
+        app: {{ include "wazuh.fullname" . }}-kibana
+        {{- include "wazuh.selectorLabels" . | nindent 8 }}
+    spec:
+    {{- with .Values.nodeSelector.kibana }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}   
+      containers:
+        - name: kibana
+          image: "{{ .Values.image.repository.kibana }}"
+          imagePullPolicy: "IfNotPresent"              
+          env:
+            - name: ELASTICSEARCH_URL
+              value: https://{{ include "wazuh.fullname" . }}-elasticsearch-headless:9200
+            - name: ELASTICSEARCH_HOSTS
+              value: https://{{ include "wazuh.fullname" . }}-elasticsearch-headless:9200
+            - name: ELASTICSEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-elasticsearch-secrets
+                  key: elasticsearch_username
+            - name: ELASTICSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-elasticsearch-secrets
+                  key: elasticsearch_password
+            - name: WAZUH_API_URL
+              value: https://{{ include "wazuh.fullname" . }}-wazuh-manager
+            - name: API_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-wazuh-secrets
+                  key: api_username
+            - name: API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-wazuh-secrets
+                  key: api_password
+            - name: CHANGE_WELCOME
+              value: "false"
+          securityContext:
+            runAsUser: 1000                 
+          ports:
+            - name: tcp-kibana
+              containerPort: 5601
+              protocol: TCP
+
+          {{- if .Values.resources.kibana }}
+          resources:
+            {{- toYaml .Values.resources.kibana | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+          # Kibana SSL
+          - name: kibana-config
+            subPath: ca-certificates.txt
+            mountPath: /certs/ca-certificates.txt
+            readOnly: true
+
+          - name: kibana-config
+            subPath: kibana.crt
+            mountPath: /certs/kibana.crt
+            readOnly: true
+
+          - name: kibana-config
+            subPath: kibana.key
+            mountPath: /certs/kibana.key
+            readOnly: true
+
+          # Kibana config
+          - name: kibana-config
+            mountPath: /kibana_settings.sh
+            subPath: kibana_settings.sh
+            readOnly: true
+
+          - name: kibana-config
+            subPath: kibana.yml
+            mountPath: /usr/share/kibana/config/kibana.yml
+            readOnly: true
+
+      volumes:
+        - name: kibana-config
+          configMap:
+            name: {{ include "wazuh.fullname" . }}-kibana-conf
+            defaultMode: 0777

@@ -1,0 +1,201 @@
+# FileBeat chart config
+filebeat:
+  enabled: true
+  image: docker.elastic.co/beats/filebeat-oss
+
+  filebeatConfig:
+    filebeat.yml: |-
+      filebeat.inputs:
+      - type: log
+        paths:
+        - /var/lib/rancher/rke2/server/logs/*.log
+
+      - type: container
+        paths:
+          - /var/log/containers/*.log
+        processors:
+          - add_kubernetes_metadata:
+              host: ${NODE_NAME}
+              matchers:
+              - logs_path:
+                  logs_path: "/var/log/containers/"
+
+      # To enable hints based autodiscover, remove `filebeat.inputs` configuration and uncomment this:
+      # filebeat.autodiscover:
+      #  providers:
+      #    - type: kubernetes
+      #      node: ${NODE_NAME}
+      #      hints.enabled: true
+      #      hints.default_config:
+      #        type: container
+      #        paths:
+      #          - /var/log/containers/*${data.kubernetes.container.id}.log
+
+      # processors:
+        # - add_cloud_metadata:
+        # - add_host_metadata:
+        # - add_docker_metadata: ~
+        # - add_kubernetes_metadata: ~
+
+      # ---------------------------- Elasticsearch Output ----------------------------
+
+      # output.elasticsearch:
+      #   hosts: ['${ELASTICSEARCH_HOSTS}']
+      #   protocol: "https"
+
+      #   # SSL
+      #   ssl.verification_mode: "certificate"
+      #   ssl.certificate_authorities:
+      #     - /usr/share/filebeat/ca-certificates.txt
+
+      #   username: "${ELASTICSEARCH_USERNAME}"
+      #   password: "${ELASTICSEARCH_PASSWORD}"
+      #   max_retries: -1
+      #   backoff.max: 30s
+      #   timeout: 30s
+
+      #   index: "filebeat-%{[agent.version]}-%{+yyyy.MM.dd}"
+
+      # ------------------------------ Logstash Output -------------------------------
+      output.logstash:
+        # The Logstash hosts
+        hosts: ["ovng-logstash-headless:5044"]
+
+        # Optional SSL. By default is off.
+        # List of root certificates for HTTPS server verifications
+        #ssl.certificate_authorities: ["/etc/pki/root/ca.pem"]
+
+        # Certificate for SSL client authentication
+        #ssl.certificate: "/etc/pki/client/cert.pem"
+
+        # Client Certificate Key
+        #ssl.key: "/etc/pki/client/cert.key"
+
+      # ============================== Filebeat modules ==============================
+
+      filebeat.config.modules:
+        # Glob pattern for configuration loading
+        path: ${path.config}/modules.d/*.yml
+
+        # Set to true to enable config reloading
+        reload.enabled: false
+
+        # Period on which files under path should be checked for changes
+        #reload.period: 10s
+
+      # ======================= Elasticsearch template setting =======================
+
+      # OpenDistro unsupported
+      # https://opendistro.github.io/for-elasticsearch-docs/docs/troubleshoot/#beats
+      setup.ilm.enabled: false
+
+      setup.template.name: "filebeat"
+      setup.template.pattern: "filebeat-*"
+
+      queue.mem:
+        events: 4096
+        flush.min_events: 512
+        flush.timeout: 5s
+
+    system.yml: |-
+      # Module: system
+      # Docs: https://www.elastic.co/guide/en/beats/filebeat/7.10/filebeat-module-system.html
+
+      - module: system
+        # Syslog
+        syslog:
+          enabled: true
+
+          # Set custom paths for the log files. If left empty,
+          # Filebeat will choose the paths depending on your OS.
+          #var.paths:
+
+        # Authorization logs
+        auth:
+          enabled: true
+
+          # Set custom paths for the log files. If left empty,
+          # Filebeat will choose the paths depending on your OS.
+          #var.paths:
+
+    testca-certificates.txt: |
+      -----BEGIN CERTIFICATE-----
+      MIIE+jCCAuKgAwIBAgIEX9BztDANBgkqhkiG9w0BAQsFADAOMQwwCgYDVQQDDANl
+      bGswHhcNMjAxMjA5MDY1MDI4WhcNMzAxMjA5MDY1MDI4WjAOMQwwCgYDVQQDDANl
+      bGswggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCHs6zNwOQ7XO4jEMEu
+      Jjuhp/mO5Wx474QDPLitD8CfFrsIBFhGuTxXT7mynE0MUfyvMSs6XkFmihHvFU0e
+      NvAFYvrcsG7dQtG2gU4bd3V+ndLRlCdCB5vjPuGtrSgfu3cfuzezzsey1s5VLDy4
+      Wehy4QeLIekb+OZ69t3EAF8DGI2DEvD+yhRke0Axise6KFII123Qh2BE37z1a7wR
+      91cJI485q43HOttWRR/vxPQVBKNMEn+j6DWqCLICJGWLO5ct9EyMCTzP/wB3AjOw
+      6KLlidOFL9sinUeHKy+s6GLZ8sffIgFDV+MAI7T6tIVrJI6ieYP4DXcQuwAL3Cae
+      XlsfBek0Q8By4DQiPka5Nqb9UKA+ie9wmSQfhY2mg2jyrDg5cKnvy+7ijbqc15bF
+      NWYJ1IFcGkUb0janos1TybPitbAUmS/Q3tRcd42eh8PCNIBi9kdflOpolmWQkH4V
+      LcdZS4iP2PgF+wPrr2dlw/V8LdLL23zRbUypEoNmgluPIZHZPV7KajEBYgTGNkOx
+      068CXjrSA/qGdS9einzP32eRRPKSTTbAsFbLxUKZ+Gd9z0hgV2uhC5H+SkOaxFWt
+      aCYwNIXDI4uSXmdT7tdEy/zByWjIlMsI0qhR02TI2MerHpTT1FuYQkOX+q/j5ky1
+      omhunUqPiyb5yTsv8R8dFz49iwIDAQABo2AwXjAPBgNVHRMBAf8EBTADAQH/MB8G
+      A1UdIwQYMBaAFJDS6o1jiMmZoHkd3hF/zVIUQ/HWMB0GA1UdDgQWBBSQ0uqNY4jJ
+      maB5Hd4Rf81SFEPx1jALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQELBQADggIBAAMm
+      5y2gCpeFshC9nZYTABW0/A+eTuJr3t9fUecsaBIz9gVuhoRNLvXnZj6NYqW/RtwY
+      pfuHIKSwCQJnEi7cpr87UwiFbEfBBEL1zPZznSMT1Ts4+gORBRvWHlepZls28xK8
+      ehB+E4YvLI8gUfPc+stm4lOeH6olmW37i183tNBrIfWjFuXq6soswXW3syAhphrQ
+      t4v5jWdcskQDOW9D5zXWI/bId+LcLkTHqSEBOM5a89GIDpavHNneAArxF4gx3wiv
+      B4JsPo0+5vztY/4AM3h6RbCyCrESaofSS9JHeEOQoOzOApdClM7dGrdvAXGyyOn7
+      btIyyXv3rQ7IPkCEAK5gFxqmxfHGN/ldeBaH/FFtwPywXUyU0rXuwopvt4u7RYaQ
+      uE37jGTpgO5/jukVcdyF+K9Zi5nEBStBQ8FJA2Xohej2dv2jyDRKfD8cAPiZ0YR8
+      xYwuzvWIf6pMod3DOS8Z0GN5hMP3/6ZCMy2S4BbkGFdkR86a9Cn+8LP6BEK0DiY+
+      T+Mj4kYGNO5sj0A1gzLtcp4JF8gMGv6BtWUYUkz5fIh/HbeOroggQNBEJ/g+rpnw
+      brJBNtWMpLQMzVAV6wzWjiJu9TmeGLjgjCMeNPoWbODYxA7MzhRDUXKY8h+fZE2F
+      fcKnnsin+OmoUXPsBJg3CmYI4OxgQ1nyyQcs5xNx
+      -----END CERTIFICATE-----
+
+  daemonset:
+    extraVolumes:
+      - name: rke2-audit-log
+        hostPath:
+          path: /var/lib/rancher/rke2/server/logs/
+
+    extraVolumeMounts:
+      - name: filebeat-config
+        mountPath: /usr/share/filebeat/modules.d/system.yml
+        readOnly: true
+        subPath: system.yml
+      # Auto mount
+      # - name: filebeat-config
+      #   mountPath: /usr/share/filebeat/ca-certificates.txt
+      #   readOnly: true
+      #   subPath: ca-certificates.txt
+      - name: rke2-audit-log
+        mountPath: /var/lib/rancher/rke2/server/logs/
+        readOnly: true
+
+    securityContext:
+      runAsUser: 0
+      privileged: false
+
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "100Mi"
+      limits:
+        cpu: "2000m"
+        memory: "2000Mi"
+
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      effect: NoSchedule
+
+  # hostAliases:
+  #   - ip: "10.0.2.14"
+  #     hostnames:
+  #       - "elk-node"
+
+  extraEnvs:
+    - name: ELASTICSEARCH_HOSTS
+      value: ovng-wazuh-elasticsearch-headless:9200
+
+    - name: 'ELASTICSEARCH_USERNAME'
+      value: "fluentd"
+
+    - name: 'ELASTICSEARCH_PASSWORD'
+      value: "vgY9VsYGX45EPWdQ"

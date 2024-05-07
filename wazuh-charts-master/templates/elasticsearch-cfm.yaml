@@ -1,0 +1,414 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wazuh.fullname" . }}-elasticsearch-conf
+  labels:
+    app: {{ include "wazuh.fullname" . }}-elasticsearch
+    {{- include "wazuh.labels" . | nindent 4 }}
+data:
+  # elasticsearch config
+  elasticsearch.yml: |
+    {{- index .Values.config.odfe "elasticsearch.yml" | toYaml | nindent 4 }}
+
+  root-ca.pem: |
+    {{- index .Values.config.odfe "root-ca.pem" | nindent 4 }}
+
+  esnode.pem: |
+    {{- index .Values.config.odfe "esnode.pem" | nindent 4 }}
+
+  esnode-key.pem: |
+    {{- index .Values.config.odfe "esnode-key.pem" | nindent 4 }}
+
+  kirk.pem: |
+    {{- index .Values.config.odfe "kirk.pem" | nindent 4 }}
+
+  kirk-key.pem: |
+    {{- index .Values.config.odfe "kirk-key.pem" | nindent 4 }}
+
+  # securityconfig
+  action_groups.yml: |
+    _meta:
+      type: "actiongroups"
+      config_version: 2
+  audit.yml: |
+    _meta:
+      type: "audit"
+      config_version: 2
+
+    config:
+      # enable/disable audit logging
+      enabled: true
+
+      audit:
+        # Enable/disable REST API auditing
+        enable_rest: true
+
+        # Categories to exclude from REST API auditing
+        disabled_rest_categories:
+          - AUTHENTICATED
+          - GRANTED_PRIVILEGES
+
+        # Enable/disable Transport API auditing
+        enable_transport: true
+
+        # Categories to exclude from Transport API auditing
+        disabled_transport_categories:
+          - AUTHENTICATED
+          - GRANTED_PRIVILEGES
+
+        # Users to be excluded from auditing. Wildcard patterns are supported. Eg:
+        # ignore_users: ["test-user", "employee-*"]
+        ignore_users:
+          - kibanaserver
+
+        # Requests to be excluded from auditing. Wildcard patterns are supported. Eg:
+        # ignore_requests: ["indices:data/read/*", "SearchRequest"]
+        ignore_requests: []
+
+        # Log individual operations in a bulk request
+        resolve_bulk_requests: false
+
+        # Include the body of the request (if available) for both REST and the transport layer
+        log_request_body: true
+
+        # Logs all indices affected by a request. Resolves aliases and wildcards/date patterns
+        resolve_indices: true
+
+        # Exclude sensitive headers from being included in the logs. Eg: Authorization
+        exclude_sensitive_headers: true
+
+      compliance:
+        # enable/disable compliance
+        enabled: true
+
+        # Log updates to internal security changes
+        internal_config: true
+
+        # Log external config files for the node
+        external_config: false
+
+        # Log only metadata of the document for read events
+        read_metadata_only: true
+
+        # Map of indexes and fields to monitor for read events. Wildcard patterns are supported for both index names and fields. Eg:
+        # read_watched_fields: {
+        #   "twitter": ["message"]
+        #   "logs-*": ["id", "attr*"]
+        # }
+        read_watched_fields: {}
+
+        # List of users to ignore for read events. Wildcard patterns are supported. Eg:
+        # read_ignore_users: ["test-user", "employee-*"]
+        read_ignore_users:
+          - kibanaserver
+
+        # Log only metadata of the document for write events
+        write_metadata_only: true
+
+        # Log only diffs for document updates
+        write_log_diffs: false
+
+        # List of indices to watch for write events. Wildcard patterns are supported
+        # write_watched_indices: ["twitter", "logs-*"]
+        write_watched_indices: []
+
+        # List of users to ignore for write events. Wildcard patterns are supported. Eg:
+        # write_ignore_users: ["test-user", "employee-*"]
+        write_ignore_users:
+          - kibanaserver
+
+  config.yml: |
+    {{- index .Values.config.odfe "config.yml" | toYaml | nindent 4 }}
+
+  nodes_dn.yml: |
+    _meta:
+      type: "nodesdn"
+      config_version: 2
+
+    # Define nodesdn mapping name and corresponding values
+    # cluster1:
+    #   nodes_dn:
+    #       - CN=*.example.com
+
+  roles.yml: |
+    _meta:
+      type: "roles"
+      config_version: 2
+
+    # Restrict users so they can only view visualization and dashboard on kibana
+    kibana_read_only:
+      reserved: true
+      cluster_permissions:
+      - cluster_composite_ops_ro
+      - cluster:monitor/main
+      index_permissions:
+        - index_patterns:
+            - '*'
+          allowed_actions:
+            - "read"
+      tenant_permissions:
+      - tenant_patterns:
+        - "global_tenant"
+        allowed_actions:
+        - "kibana_all_read"
+
+    # The security REST API access role is used to assign specific users access to change the security settings through the REST API.
+    security_rest_api_access:
+      reserved: true
+    
+    # Allows users to view monitors, destinations and alerts
+    alerting_read_access:
+      reserved: true
+      cluster_permissions:
+        - 'cluster:admin/opendistro/alerting/alerts/get'
+        - 'cluster:admin/opendistro/alerting/destination/get'
+        - 'cluster:admin/opendistro/alerting/monitor/get'
+        - 'cluster:admin/opendistro/alerting/monitor/search'
+
+    # Allows users to view and acknowledge alerts
+    alerting_ack_alerts:
+      reserved: true
+      cluster_permissions:
+        - 'cluster:admin/opendistro/alerting/alerts/*'
+
+    # Allows users to use all alerting functionality
+    alerting_full_access:
+      reserved: true
+      cluster_permissions:
+        - 'cluster_monitor'
+        - 'cluster:admin/opendistro/alerting/*'
+        - 'cluster:admin/ingest/pipeline/put'
+      index_permissions:
+        - index_patterns:
+            - '*'
+          allowed_actions:
+            - 'indices_monitor'
+            - 'indices:admin/aliases/get'
+            - 'indices:admin/mappings/get'
+
+    # OV log fowarder
+    fluentd:
+      reserved: false
+      hidden: false
+      cluster_permissions:
+      - cluster_manage_index_templates
+      - cluster_monitor
+      - indices:admin/template/get
+      - indices:admin/template/put
+      - cluster:admin/ingest/pipeline/put
+      - cluster:admin/ingest/pipeline/get
+      index_permissions:
+        - index_patterns:
+          - 'fluentd-*'
+          - 'filebeat-*'
+          - 'logstash-*'
+          - 'syslog-*'
+          - 'global-*'
+          - 'k8s-*'
+          - 'actserver-*'
+          - 'vpn-*'
+          allowed_actions:
+          - "crud"
+          - "create_index"
+          - "manage"
+      static: false
+
+    # Support user, read only
+    support:
+      reserved: false
+      hidden: false
+      cluster_permissions:
+      - cluster_composite_ops_ro
+      - cluster:monitor/main
+      index_permissions:
+        - index_patterns:
+          - 'fluentd-*'
+          - 'filebeat-*'
+          - 'logstash-*'
+          - 'syslog-*'
+          - 'global-*'
+          - 'k8s-*'
+          - 'actserver-*'
+          - 'vpn-*'
+          allowed_actions:
+          - "read"
+      tenant_permissions:
+      - tenant_patterns:
+        - "global_tenant"
+        allowed_actions:
+        - "kibana_all_read"
+      static: false
+
+  roles_mapping.yml: |
+    ---
+    # In this file users, backendroles and hosts can be mapped to Open Distro Security roles.
+    # Permissions for Opendistro roles are configured in roles.yml
+
+    _meta:
+      type: "rolesmapping"
+      config_version: 2
+
+    # Define your roles mapping here
+
+    ## Demo roles mapping
+
+    all_access:
+      reserved: false
+      backend_roles:
+      - "admin"
+      - "ovng-admin"
+      - "wazuh-admin"
+      description: "Maps admin to all_access"
+
+    kibana_read_only:
+      reserved: false
+      backend_roles:
+      - "wazuh-user"
+
+    own_index:
+      reserved: false
+      users:
+      - "*"
+      description: "Allow full access to an index named like the username"
+
+    logstash:
+      reserved: false
+      backend_roles:
+      - "logstash"
+
+    kibana_user:
+      reserved: false
+      backend_roles:
+      - "kibanauser"
+      description: "Maps kibanauser to kibana_user"
+
+    readall:
+      reserved: false
+      backend_roles:
+      - "readall"
+      - "ovng-admin"
+      - "support"
+
+    manage_snapshots:
+      reserved: false
+      backend_roles:
+      - "snapshotrestore"
+
+    kibana_server:
+      reserved: true
+      users:
+      - "kibanaserver"
+
+    fluentd:
+      reserved: false
+      users:
+      - "fluentd"
+
+    support:
+      reserved: false
+      users:
+      - "support"
+      backend_roles:
+      - "support"
+
+  internal_users.yml: |
+    {{- index .Values.config.odfe "internal_users.yml" | toYaml | nindent 4 }}
+
+  tenants.yml: |
+    ---
+    _meta:
+      type: "tenants"
+      config_version: 2
+
+    # Define your tenants here
+
+    ## Demo tenants
+    admin_tenant:
+      reserved: false
+      description: "Demo tenant for admin user"
+
+  whitelist.yml: |
+    ---
+    _meta:
+      type: "whitelist"
+      config_version: 2
+
+    # Description:
+    # enabled - feature flag.
+    # if enabled is false, the whitelisting feature is removed.
+    # This is like removing the check that checks if an API is whitelisted.
+    # This is equivalent to continuing with the usual access control checks, and removing all the code that implements whitelisting.
+    # if enabled is true, then all users except SuperAdmin can access only the APIs in requests
+    # SuperAdmin can access all APIs.
+    # SuperAdmin is defined by the SuperAdmin certificate, which is configured in the elasticsearch.yml setting: opendistro_security.authcz.admin_dn:
+    # Refer to the example setting in elasticsearch.yml.example, and the opendistro documentation to know more about configuring SuperAdmin.
+    #
+    # requests - map of whitelisted endpoints, and the whitelisted HTTP requests for those endpoints
+
+    # Examples showing how to configure this yml file (make sure the _meta data from above is also there):
+    # Example 1:
+    # To enable whitelisting and whitelist GET /_cluster/settings
+    #
+    #config:
+    #  enabled: true
+    #  requests:
+    #    /_cluster/settings:
+    #      - GET
+    #
+    # Example 2:
+    # If you want to whitelist multiple request methods for /_cluster/settings (GET,PUT):
+    #
+    #config:
+    #  enabled: true
+    #  requests:
+    #    /_cluster/settings:
+    #      - GET
+    #      - PUT
+    #
+    # Example 3:
+    # If you want to whitelist other APIs as well, for example GET /_cat/nodes, and GET /_cat/shards:
+    #
+    #config:
+    #  enabled: true
+    #  requests:
+    #    /_cluster/settings:
+    #      - GET
+    #      - PUT
+    #    /_cat/nodes:
+    #      - GET
+    #    /_cat/shards:
+    #      - GET
+    #
+    # Example 4:
+    # If you want to disable the whitelisting feature, set enabled to false.
+    #  enabled: false
+    #  requests:
+    #    /_cluster/settings:
+    #      - GET
+    #
+    #At this point, all APIs become whitelisted because the feature to whitelist is off, so requests is irrelevant.
+
+
+    #this name must be config
+    config:
+      enabled: false
+      requests:
+        /_cluster/settings:
+          - GET
+        /_cat/nodes:
+          - GET
+
+  log4j2.properties: |
+    status = error
+
+    appender.console.type = Console
+    appender.console.name = console
+    appender.console.layout.type = PatternLayout
+    appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] [%node_name]%marker %m%n
+
+    rootLogger.level = info
+    rootLogger.appenderRef.console.ref = console
+
+    logger.opendistro_security.name = com.amazon.dlic.auth.http.jwt
+    logger.opendistro_security.level = info

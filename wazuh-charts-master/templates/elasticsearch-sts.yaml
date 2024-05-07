@@ -1,0 +1,197 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "wazuh.fullname" . }}-elasticsearch
+  labels:
+    app: {{ include "wazuh.fullname" . }}-elasticsearch
+    {{- include "wazuh.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount.elasticsearch | int }}
+
+  selector:
+    matchLabels:
+      app: {{ include "wazuh.fullname" . }}-elasticsearch
+      {{- include "wazuh.selectorLabels" . | nindent 6 }}
+
+  serviceName: {{ include "wazuh.fullname" . }}-elasticsearch
+
+  template:
+    metadata:
+      annotations:
+        checksum/elasticsearch-cfm-yaml: {{ include (print $.Template.BasePath "/elasticsearch-cfm.yaml") . | sha256sum }}
+      labels:
+        app: {{ include "wazuh.fullname" . }}-elasticsearch
+        {{- include "wazuh.selectorLabels" . | nindent 8 }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}   
+      initContainers:
+        - name: fix-permission
+          image: alpine:latest
+          command:
+            - sh
+            - '-c'
+            - 'chown -R 1000:1000 /usr/share/elasticsearch/data'
+          volumeMounts:
+            - name: elasticsearch-data
+              mountPath: /usr/share/elasticsearch/data
+
+        - name: update-sysctl
+          image: alpine:latest
+          command:
+            - sysctl
+            - -w
+            - vm.max_map_count=262144
+          securityContext:
+            privileged: true
+
+        # - name: update-ulimit
+        #   image: alpine:latest
+        #   command:
+        #     - ulimit
+        #     - -n
+        #     - "65536"
+        #   securityContext:
+        #     privileged: true
+
+      containers:
+        - name: elasticsearch
+          image: "{{ .Values.image.repository.elasticsearch }}"
+          imagePullPolicy: "IfNotPresent"           
+          ports:
+          - name: tcp-api
+            containerPort: 9200
+            protocol: TCP
+          - name: tcp-nodes
+            containerPort: 9300
+            protocol: TCP
+          env:
+            - name: node.name
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: discovery.seed_hosts
+              value: {{ include "wazuh.fullname" . }}-elasticsearch-headless
+            - name: cluster.initial_master_nodes
+              value: {{ template "initial-master-nodes" . }}
+            - name: KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: PROCESSORS
+              valueFrom:
+                resourceFieldRef:
+                  resource: limits.cpu
+            # - name: bootstrap.memory_lock
+            #   value: "true"
+            - name: ES_JAVA_OPTS
+              value: "{{ .Values.java_opts.elasticsearch }}"
+            - name: DISABLE_INSTALL_DEMO_CONFIG
+              value: "true"
+
+          {{- if .Values.resources.elasticsearch }}
+          resources:
+            {{- toYaml .Values.resources.elasticsearch | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            # Basic OpenDistro config
+            - name: config
+              subPath: elasticsearch.yml
+              mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+              readOnly: true
+            # OpenDistro security config
+            ## SSL
+            - name: config
+              subPath: root-ca.pem
+              mountPath: /usr/share/elasticsearch/config/root-ca.pem
+              readOnly: true
+            - name: config
+              subPath: esnode.pem
+              mountPath: /usr/share/elasticsearch/config/esnode.pem
+              readOnly: true
+            - name: config
+              subPath: esnode-key.pem
+              mountPath: /usr/share/elasticsearch/config/esnode-key.pem
+              readOnly: true
+            - name: config
+              subPath: kirk.pem
+              mountPath: /usr/share/elasticsearch/config/kirk.pem
+              readOnly: true
+            - name: config
+              subPath: kirk-key.pem
+              mountPath: /usr/share/elasticsearch/config/kirk-key.pem
+              readOnly: true
+            - name: config
+              subPath: log4j2.properties
+              mountPath: /usr/share/elasticsearch/config/log4j2.properties
+              readOnly: true
+            ## Config
+            - name: config
+              subPath: action_groups.yml
+              mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/action_groups.yml
+              readOnly: true
+            - name: config
+              subPath: audit.yml
+              mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/audit.yml
+              readOnly: true
+            - name: config
+              subPath: config.yml
+              mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/config.yml
+              readOnly: true
+            - name: config
+              subPath: nodes_dn.yml
+              mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/nodes_dn.yml
+              readOnly: true
+            #
+            - name: config
+              subPath: roles.yml
+              mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/roles.yml
+              readOnly: true
+            - name: config
+              subPath: roles_mapping.yml
+              mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/roles_mapping.yml
+              readOnly: true
+            - name: config
+              subPath: internal_users.yml
+              mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/internal_users.yml
+              readOnly: true
+            - name: config
+              subPath: tenants.yml
+              mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/tenants.yml
+              readOnly: true
+            - name: config
+              subPath: whitelist.yml
+              mountPath: /usr/share/elasticsearch/plugins/opendistro_security/securityconfig/whitelist.yml
+              readOnly: true
+            # Data
+            - name: elasticsearch-data
+              mountPath: /usr/share/elasticsearch/data
+
+  {{- with .Values.nodeSelector.kibana }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "wazuh.fullname" . }}-elasticsearch-conf
+
+{{- if .Values.persistence.elasticsearch.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: elasticsearch-data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+{{- if .Values.persistence.elasticsearch.storageClassName }}        
+      storageClassName: {{ .Values.persistence.elasticsearch.storageClassName }}
+{{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.elasticsearch.size | quote }}
+{{- end }}

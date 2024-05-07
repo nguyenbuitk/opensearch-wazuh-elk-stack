@@ -1,0 +1,8 @@
+Author: Pham Tien Thanh <ptthanh@tma.com.vn>
+
+SIEM Stack - ELK - Wazuh
+
+1. Watch all containers come up.
+  $ kubectl get pods --namespace={{ .Release.Namespace }} -w
+2. Create ingress for Kibana
+3. Enjoy

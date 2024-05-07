@@ -1,0 +1,52 @@
+---
+daemonset:
+  enabled: true
+  filebeatConfig:
+    filebeat.yml: |
+      filebeat.inputs:
+      - type: container
+        paths:
+          - /var/log/containers/*.log
+        processors:
+        - add_kubernetes_metadata:
+            host: ${NODE_NAME}
+            matchers:
+            - logs_path:
+                logs_path: "/var/log/containers/"
+
+      output.elasticsearch:
+        host: '${NODE_NAME}'
+        hosts: '${ELASTICSEARCH_HOSTS:elasticsearch-master:9200}'
+
+deployment:
+  enabled: false
+  filebeatConfig:
+    filebeat.yml: |
+      filebeat.inputs:
+      - type: tcp
+        max_message_size: 10MiB
+        host: "localhost:9000"
+
+      output.elasticsearch:
+        host: '${NODE_NAME}'
+        hosts: '${ELASTICSEARCH_HOSTS:elasticsearch-master:9200}'
+
+
+replicas: 1
+image: "docker.elastic.co/beats/filebeat"
+imageTag: "7.12.1"
+imagePullPolicy: "IfNotPresent"
+imagePullSecrets: []
+
+affinity: {}
+envFrom: []
+extraEnvs: []
+extraVolumes: []
+extraVolumeMounts: []
+filebeatConfig: {}
+nodeSelector: {}
+podSecurityContext: {}
+resources: {}
+secretMounts: []
+tolerations: []
+labels: {}

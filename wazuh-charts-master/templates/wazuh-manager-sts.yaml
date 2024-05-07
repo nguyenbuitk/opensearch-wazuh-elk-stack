@@ -1,0 +1,164 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "wazuh.fullname" . }}-manager
+  labels:
+    app: {{ include "wazuh.fullname" . }}-manager
+    {{- include "wazuh.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount.wazuh }}
+
+  selector:
+    matchLabels:
+      app: {{ include "wazuh.fullname" . }}-manager
+      {{- include "wazuh.selectorLabels" . | nindent 6 }}
+      node-type: master
+
+  serviceName: {{ include "wazuh.fullname" . }}-manager
+
+  template:
+    metadata:
+      annotations:
+        checksum/elasticsearch-secret-yaml: {{ include (print $.Template.BasePath "/elasticsearch-secret.yaml") . | sha256sum }}
+        checksum/wazuh-manager-cfm-yaml: {{ include (print $.Template.BasePath "/wazuh-manager-cfm.yaml") . | sha256sum }}
+        checksum/wazuh-secret-yaml: {{ include (print $.Template.BasePath "/wazuh-secret.yaml") . | sha256sum }}
+      labels:
+        app: {{ include "wazuh.fullname" . }}-manager
+        {{- include "wazuh.selectorLabels" . | nindent 8 }}
+        node-type: master
+    spec:
+    {{- with .Values.nodeSelector.wazuh }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}    
+      containers:
+        - name: wazuh-manager
+          image: "{{ .Values.image.repository.wazuh }}"
+          imagePullPolicy: "IfNotPresent"  
+          env:
+            - name: ELASTICSEARCH_URL
+              value: https://{{ include "wazuh.fullname" . }}-elasticsearch-headless:9200
+            - name: ELASTIC_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-elasticsearch-secrets
+                  key: elasticsearch_username
+            - name: ELASTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-elasticsearch-secrets
+                  key: elasticsearch_password
+            - name: API_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-wazuh-secrets
+                  key: api_username
+            - name: API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "wazuh.fullname" . }}-wazuh-secrets
+                  key: api_password
+            - name: FILEBEAT_SSL_VERIFICATION_MODE
+              value: 'none'
+            - name: NODE_TLS_REJECT_UNAUTHORIZED
+              value: '0'
+          securityContext:
+            capabilities:
+              add: ["SYS_CHROOT"]
+          ports:
+            - name: tcp-worker
+              containerPort: 1514
+              protocol: TCP
+            - name: tcp-manager
+              containerPort: 1515
+              protocol: TCP
+            - name: udp-syslog
+              containerPort: 514
+              protocol: UDP
+            - name: tcp-syslog
+              containerPort: 514
+              protocol: TCP
+
+          {{- if .Values.resources.wazuh }}
+          resources:
+            {{- toYaml .Values.resources.wazuh | nindent 12 }}
+          {{- end }}
+
+          volumeMounts:
+            # Wazuh init will copy /wazuh-config-mount to wazuh installation folder
+            - name: wazuh-config
+              subPath: ossec.conf
+              mountPath: /wazuh-config-mount/etc/ossec.conf
+              readOnly: true
+            - name: wazuh-config
+              subPath: local_decoder.xml
+              mountPath: /wazuh-config-mount/etc/decoders/local_decoder.xml
+              readOnly: true
+            - name: wazuh-config
+              subPath: local_rules.xml
+              mountPath: /wazuh-config-mount/etc/rules/local_rules.xml
+              readOnly: true
+
+{{- if .Values.persistence.wazuh.enabled }}
+            # Wazuh data
+            - name: wazuh-data
+              mountPath: /var/ossec/api/configuration
+              subPath: wazuh/var/ossec/api/configuration
+            - name: wazuh-data
+              mountPath: /var/ossec/etc
+              subPath: wazuh/var/ossec/etc
+            - name: wazuh-data
+              mountPath: /var/ossec/logs
+              subPath: wazuh/var/ossec/logs
+            - name: wazuh-data
+              mountPath: /var/ossec/queue
+              subPath: wazuh/var/ossec/queue
+            - name: wazuh-data
+              mountPath: /var/ossec/var/multigroups
+              subPath: wazuh/var/ossec/var/multigroups
+            - name: wazuh-data
+              mountPath: /var/ossec/integrations
+              subPath: wazuh/var/ossec/integrations
+            - name: wazuh-data
+              mountPath: /var/ossec/active-response/bin
+              subPath: wazuh/var/ossec/active-response/bin
+            - name: wazuh-data
+              mountPath: /var/ossec/agentless
+              subPath: wazuh/var/ossec/agentless
+            - name: wazuh-data
+              mountPath: /var/ossec/wodles
+              subPath: wazuh/var/ossec/wodles
+            - name: wazuh-data
+              mountPath: /etc/filebeat
+              subPath: filebeat/etc/filebeat
+            - name: wazuh-data
+              mountPath: /var/lib/filebeat
+              subPath: filebeat/var/lib/filebeat
+{{- end }}
+
+      volumes:
+        # Wazuh config
+        - name: wazuh-config
+          configMap:
+            name: {{ include "wazuh.fullname" . }}-wazuh-manager-conf
+
+{{- if .Values.persistence.wazuh.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: wazuh-data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+{{- if .Values.persistence.wazuh.storageClassName }}        
+      storageClassName: {{ .Values.persistence.wazuh.storageClassName }}
+{{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.persistence.wazuh.size | quote }}
+{{- end }}

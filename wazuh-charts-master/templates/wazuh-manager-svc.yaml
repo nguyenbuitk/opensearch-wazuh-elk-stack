@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wazuh.fullname" . }}-wazuh-manager
+  labels:
+    {{- include "wazuh.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+  - name: tcp-agents-events
+    port: 1514
+    protocol: TCP
+  - name: http-registration
+    port: 1515
+    protocol: TCP
+  - name: udp-syslog
+    port: 514
+  - name: tcp-syslog
+    port: 514
+    protocol: UDP
+  - name: tcp-cluster
+    port: 1516
+    targetPort: 1516
+  - name: http-api
+    port: 55000
+    targetPort: 55000
+  selector:
+    app: {{ include "wazuh.fullname" . }}-manager
+    {{- include "wazuh.selectorLabels" . | nindent 4 }}

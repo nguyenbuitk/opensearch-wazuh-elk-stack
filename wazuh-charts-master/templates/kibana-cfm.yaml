@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wazuh.fullname" . }}-kibana-conf
+  labels:
+    app: {{ include "wazuh.fullname" . }}-kibana-conf
+    {{- include "wazuh.labels" . | nindent 4 }}
+data:
+  kibana.yml: |
+    {{- index .Values.config.kibana "kibana.yml" | toYaml | nindent 4 }}
+  kibana.crt: |
+    {{- index .Values.config.kibana "kibana.crt" | nindent 4 }}
+  kibana.key: |
+    {{- index .Values.config.kibana "kibana.key" | nindent 4 }}
+  ca-certificates.txt: |
+    {{- index .Values.config.kibana "ca-certificates.txt" | nindent 4 }}
+  kibana_settings.sh: |
+    {{- index .Values.config.kibana "kibana_settings.sh" | nindent 4 }}

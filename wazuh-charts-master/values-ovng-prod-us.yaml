@@ -1,0 +1,1620 @@
+# Author: Pham Tien Thanh <ptthanh@tma.com.vn>
+# Default values for ovng-prod-us.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# -------------------------------------------------------------------------------------------------
+# Docker image setting
+
+image:
+  repository:
+    elasticsearch: amazon/opendistro-for-elasticsearch:1.13.3
+    kibana: wazuh/wazuh-kibana-odfe:4.2.0
+    wazuh: wazuh/wazuh-odfe:4.2.0
+  pullPolicy: IfNotPresent # Always IfNotPresent
+
+imagePullSecrets: {}
+
+## Enable persistence using Persistent Volume Claims
+## ref: http://kubernetes.io/docs/user-guide/persistent-volumes/
+##
+persistence:
+  elasticsearch:
+    ## @param persistence.elasticsearch.enabled Enable persistence using a `PersistentVolumeClaim`
+    ##
+    enabled: true
+    ## @param persistence.elasticsearch.size Persistent Volume Size
+    size: 950Gi
+
+  wazuh:
+    ## @param persistence.wazuh.enabled Enable persistence using a `PersistentVolumeClaim`
+    ##
+    enabled: true
+    ## @param persistence.wazuh.size Persistent Volume Size
+    size: 50Gi
+
+# -------------------------------------------------------------------------------------------------
+# Pod setting
+
+# Deployment/Statefulset relica count for each service
+replicaCount:
+  elasticsearch: 1
+  kibana: 1
+  wazuh: 1
+
+resources:
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user.
+  elasticsearch:
+    limits:
+      cpu: 8000m
+      memory: 8Gi
+    requests:
+      cpu: 2000m
+      memory: 4096Mi
+
+  wazuh:
+    limits:
+      cpu: 8000m
+      memory: 8Gi
+    requests:
+      cpu: 512m
+      memory: 2024Mi
+
+  logstash:
+    limits:
+      cpu: 4000m
+      memory: 2048Mi
+    requests:
+      cpu: 500m
+      memory: 1024Mi
+
+  kibana:
+    limits:
+      cpu: 4000m
+      memory: 4096Mi
+    requests:
+      cpu: 1000m
+      memory: 128Mi
+
+java_opts:
+  elasticsearch: "-Xms7500m -Xmx7500m"
+  kibana: "-Xms1500m -Xmx1500m"
+
+credentials:
+  wazuh:
+    api_username: wazuh
+    api_password: x5R7=U-bYQYP3&p2
+  # Elasticsearch first admin user password, only set on firstboot
+  # If you change it, you need update yourself by Elasticsearch API or Kibana
+  elastic_credential:
+    elasticsearch_username: admin
+    # Please also change password bcrypt hash in internal_users.yml, this chart is not support change admin user password yet
+    elasticsearch_password: "2KAnCG7yDsg9XsKW"
+
+config:
+  wazuh:
+    ossec.xml: |
+      <ossec_config>
+        <global>
+          <jsonout_output>yes</jsonout_output>
+          <alerts_log>yes</alerts_log>
+          <logall>no</logall>
+          <logall_json>no</logall_json>
+          <email_notification>no</email_notification>
+          <smtp_server>smtp.example.wazuh.com</smtp_server>
+          <email_from>ossecm@example.wazuh.com</email_from>
+          <email_to>recipient@example.wazuh.com</email_to>
+          <email_maxperhour>12</email_maxperhour>
+          <email_log_source>alerts.log</email_log_source>
+          <agents_disconnection_time>10m</agents_disconnection_time>
+          <agents_disconnection_alert_time>0</agents_disconnection_alert_time>
+        </global>
+
+        <alerts>
+          <log_alert_level>1</log_alert_level>
+          <email_alert_level>12</email_alert_level>
+        </alerts>
+
+        <!-- Choose between "plain", "json", or "plain,json" for the format of internal logs -->
+        <logging>
+          <log_format>plain</log_format>
+        </logging>
+
+        <remote>
+          <connection>secure</connection>
+          <port>1514</port>
+          <protocol>tcp</protocol>
+          <queue_size>131072</queue_size>
+        </remote>
+
+        <!-- Configure Wazuh manager to receive Syslog messages -->
+        <!-- https://documentation.wazuh.com/current/user-manual/reference/ossec-conf/remote.html -->
+        <remote>
+          <connection>syslog</connection>
+          <port>514</port>
+          <protocol>udp</protocol>
+          <allowed-ips>10.42.0.0/16</allowed-ips>
+          <!-- <local_ip>10.0.0.1</local_ip> -->
+        </remote>
+
+        <!-- Policy monitoring -->
+        <rootcheck>
+          <disabled>no</disabled>
+          <check_files>yes</check_files>
+          <check_trojans>yes</check_trojans>
+          <check_dev>yes</check_dev>
+          <check_sys>yes</check_sys>
+          <check_pids>yes</check_pids>
+          <check_ports>yes</check_ports>
+          <check_if>yes</check_if>
+
+          <!-- Frequency that rootcheck is executed - every 12 hours -->
+          <frequency>43200</frequency>
+
+          <rootkit_files>/var/ossec/etc/rootcheck/rootkit_files.txt</rootkit_files>
+          <rootkit_trojans>/var/ossec/etc/rootcheck/rootkit_trojans.txt</rootkit_trojans>
+
+          <skip_nfs>yes</skip_nfs>
+        </rootcheck>
+
+        <wodle name="cis-cat">
+          <disabled>yes</disabled>
+          <timeout>1800</timeout>
+          <interval>1d</interval>
+          <scan-on-start>yes</scan-on-start>
+
+          <java_path>wodles/java</java_path>
+          <ciscat_path>wodles/ciscat</ciscat_path>
+        </wodle>
+
+        <!-- Osquery integration -->
+        <wodle name="osquery">
+          <disabled>yes</disabled>
+          <run_daemon>yes</run_daemon>
+          <log_path>/var/log/osquery/osqueryd.results.log</log_path>
+          <config_path>/etc/osquery/osquery.conf</config_path>
+          <add_labels>yes</add_labels>
+        </wodle>
+
+        <!-- System inventory -->
+        <wodle name="syscollector">
+          <disabled>no</disabled>
+          <interval>1h</interval>
+          <scan_on_start>yes</scan_on_start>
+          <hardware>yes</hardware>
+          <os>yes</os>
+          <network>yes</network>
+          <packages>yes</packages>
+          <ports all="no">yes</ports>
+          <processes>yes</processes>
+        </wodle>
+
+        <sca>
+          <enabled>yes</enabled>
+          <scan_on_start>yes</scan_on_start>
+          <interval>12h</interval>
+          <skip_nfs>yes</skip_nfs>
+        </sca>
+
+        <vulnerability-detector>
+          <enabled>no</enabled>
+          <interval>5m</interval>
+          <ignore_time>6h</ignore_time>
+          <run_on_start>yes</run_on_start>
+
+          <!-- Ubuntu OS vulnerabilities --> 
+          <provider name="canonical">
+            <enabled>no</enabled>
+            <os>trusty</os>
+            <os>xenial</os>
+            <os>bionic</os>
+            <os>focal</os>
+            <update_interval>1h</update_interval>
+          </provider>
+
+          <!-- Debian OS vulnerabilities -->  
+          <provider name="debian">
+            <enabled>no</enabled>
+            <os>stretch</os>
+            <os>buster</os>
+            <update_interval>1h</update_interval>
+          </provider>
+
+          <!-- RedHat OS vulnerabilities -->  
+          <provider name="redhat">
+            <enabled>no</enabled>
+            <os>5</os>
+            <os>6</os>
+            <os>7</os>
+            <os>8</os>
+            <update_interval>1h</update_interval>
+          </provider>
+
+          <!-- Windows OS vulnerabilities -->
+          <provider name="msu">
+            <enabled>yes</enabled>
+            <update_interval>1h</update_interval>
+          </provider>
+
+          <!-- Aggregate vulnerabilities -->
+          <provider name="nvd">
+            <enabled>yes</enabled>
+            <update_from_year>2010</update_from_year>
+            <update_interval>1h</update_interval>
+          </provider>
+
+        </vulnerability-detector>
+
+        <!-- File integrity monitoring -->
+        <syscheck>
+          <disabled>no</disabled>
+
+          <!-- Frequency that syscheck is executed default every 12 hours -->
+          <frequency>43200</frequency>
+
+          <scan_on_start>yes</scan_on_start>
+
+          <!-- Generate alert when new file detected -->
+          <alert_new_files>yes</alert_new_files>
+
+          <!-- Don't ignore files that change more than 'frequency' times -->
+          <auto_ignore frequency="10" timeframe="3600">no</auto_ignore>
+
+          <!-- Directories to check  (perform all possible verifications) -->
+          <directories>/etc,/usr/bin,/usr/sbin</directories>
+          <directories>/bin,/sbin,/boot</directories>
+
+          <!-- Files/directories to ignore -->
+          <ignore>/etc/mtab</ignore>
+          <ignore>/etc/hosts.deny</ignore>
+          <ignore>/etc/mail/statistics</ignore>
+          <ignore>/etc/random-seed</ignore>
+          <ignore>/etc/random.seed</ignore>
+          <ignore>/etc/adjtime</ignore>
+          <ignore>/etc/httpd/logs</ignore>
+          <ignore>/etc/utmpx</ignore>
+          <ignore>/etc/wtmpx</ignore>
+          <ignore>/etc/cups/certs</ignore>
+          <ignore>/etc/dumpdates</ignore>
+          <ignore>/etc/svc/volatile</ignore>
+
+          <!-- File types to ignore -->
+          <ignore type="sregex">.log$|.swp$</ignore>
+
+          <!-- Check the file, but never compute the diff -->
+          <nodiff>/etc/ssl/private.key</nodiff>
+
+          <skip_nfs>yes</skip_nfs>
+          <skip_dev>yes</skip_dev>
+          <skip_proc>yes</skip_proc>
+          <skip_sys>yes</skip_sys>
+
+          <!-- Nice value for Syscheck process -->
+          <process_priority>10</process_priority>
+
+          <!-- Maximum output throughput -->
+          <max_eps>100</max_eps>
+
+          <!-- Database synchronization settings -->
+          <synchronization>
+            <enabled>yes</enabled>
+            <interval>5m</interval>
+            <max_interval>1h</max_interval>
+            <max_eps>10</max_eps>
+          </synchronization>
+        </syscheck>
+
+        <!-- Active response -->
+        <global>
+          <white_list>127.0.0.1</white_list>
+          <white_list>^localhost.localdomain$</white_list>
+          <white_list>10.66.0.2</white_list>
+        </global>
+
+        <command>
+          <name>disable-account</name>
+          <executable>disable-account.sh</executable>
+          <expect>user</expect>
+          <timeout_allowed>yes</timeout_allowed>
+        </command>
+
+        <command>
+          <name>restart-ossec</name>
+          <executable>restart-ossec.sh</executable>
+          <expect></expect>
+        </command>
+
+        <command>
+          <name>firewall-drop</name>
+          <executable>firewall-drop.sh</executable>
+          <expect>srcip</expect>
+          <timeout_allowed>yes</timeout_allowed>
+        </command>
+
+        <command>
+          <name>host-deny</name>
+          <executable>host-deny.sh</executable>
+          <expect>srcip</expect>
+          <timeout_allowed>yes</timeout_allowed>
+        </command>
+
+        <command>
+          <name>route-null</name>
+          <executable>route-null.sh</executable>
+          <expect>srcip</expect>
+          <timeout_allowed>yes</timeout_allowed>
+        </command>
+
+        <command>
+          <name>win_route-null</name>
+          <executable>route-null.cmd</executable>
+          <expect>srcip</expect>
+          <timeout_allowed>yes</timeout_allowed>
+        </command>
+
+        <command>
+          <name>win_route-null-2012</name>
+          <executable>route-null-2012.cmd</executable>
+          <expect>srcip</expect>
+          <timeout_allowed>yes</timeout_allowed>
+        </command>
+
+        <command>
+          <name>netsh</name>
+          <executable>netsh.cmd</executable>
+          <expect>srcip</expect>
+          <timeout_allowed>yes</timeout_allowed>
+        </command>
+
+        <command>
+          <name>netsh-win-2016</name>
+          <executable>netsh-win-2016.cmd</executable>
+          <expect>srcip</expect>
+          <timeout_allowed>yes</timeout_allowed>
+        </command>
+
+        <!--
+        <active-response>
+          active-response options here
+        </active-response>
+        -->
+
+        <!-- Log analysis -->
+        <localfile>
+          <log_format>command</log_format>
+          <command>df -P</command>
+          <frequency>360</frequency>
+        </localfile>
+
+        <localfile>
+          <log_format>full_command</log_format>
+          <command>netstat -tulpn | sed 's/\([[:alnum:]]\+\)\ \+[[:digit:]]\+\ \+[[:digit:]]\+\ \+\(.*\):\([[:digit:]]*\)\ \+\([0-9\.\:\*]\+\).\+\ \([[:digit:]]*\/[[:alnum:]\-]*\).*/\1 \2 == \3 == \4 \5/' | sort -k 4 -g | sed 's/ == \(.*\) ==/:\1/' | sed 1,2d</command>
+          <alias>netstat listening ports</alias>
+          <frequency>360</frequency>
+        </localfile>
+
+        <localfile>
+          <log_format>full_command</log_format>
+          <command>last -n 20</command>
+          <frequency>360</frequency>
+        </localfile>
+
+        <ruleset>
+          <!-- Default ruleset -->
+          <decoder_dir>ruleset/decoders</decoder_dir>
+          <rule_dir>ruleset/rules</rule_dir>
+          <rule_exclude>0215-policy_rules.xml</rule_exclude>
+          <list>etc/lists/audit-keys</list>
+          <list>etc/lists/amazon/aws-eventnames</list>
+          <list>etc/lists/security-eventchannel</list>
+
+          <!-- User-defined ruleset -->
+          <decoder_dir>etc/decoders</decoder_dir>
+          <rule_dir>etc/rules</rule_dir>
+        </ruleset>
+
+        <rule_test>
+          <enabled>yes</enabled>
+          <threads>1</threads>
+          <max_sessions>64</max_sessions>
+          <session_timeout>15m</session_timeout>
+        </rule_test>
+
+        <!-- Configuration for ossec-authd -->
+        <auth>
+          <disabled>no</disabled>
+          <port>1515</port>
+          <use_source_ip>no</use_source_ip>
+          <force_insert>yes</force_insert>
+          <force_time>0</force_time>
+          <purge>yes</purge>
+          <use_password>no</use_password>
+          <ciphers>HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH</ciphers>
+          <!-- <ssl_agent_ca></ssl_agent_ca> -->
+          <ssl_verify_host>no</ssl_verify_host>
+          <ssl_manager_cert>/var/ossec/etc/sslmanager.cert</ssl_manager_cert>
+          <ssl_manager_key>/var/ossec/etc/sslmanager.key</ssl_manager_key>
+          <ssl_auto_negotiate>no</ssl_auto_negotiate>
+        </auth>
+
+        <cluster>
+          <name>wazuh</name>
+          <!-- Do not edit node name -->
+          <node_name>to_be_replaced_by_hostname</node_name>
+          <node_type>master</node_type>
+          <key></key>
+          <port>1516</port>
+          <bind_addr>0.0.0.0</bind_addr>
+          <nodes>
+              <node>NODE_IP</node>
+          </nodes>
+          <hidden>no</hidden>
+          <disabled>yes</disabled>
+        </cluster>
+
+      </ossec_config>
+
+      <ossec_config>
+        <localfile>
+          <log_format>syslog</log_format>
+          <location>/var/ossec/logs/active-responses.log</location>
+        </localfile>
+
+      </ossec_config>
+    local_decoder.xml: |
+        <!-- Local Decoders -->
+
+        <!-- Modify it at your will. -->
+        <!-- Copyright (C) 2015-2020, Wazuh Inc. -->
+
+        <!--
+          - Allowed static fields:
+          - location   - where the log came from (only on FTS)
+          - srcuser    - extracts the source username
+          - dstuser    - extracts the destination (target) username
+          - user       - an alias to dstuser (only one of the two can be used)
+          - srcip      - source ip
+          - dstip      - dst ip
+          - srcport    - source port
+          - dstport    - destination port
+          - protocol   - protocol
+          - id         - event id
+          - url        - url of the event
+          - action     - event action (deny, drop, accept, etc)
+          - status     - event status (success, failure, etc)
+          - extra_data - Any extra data
+        -->
+
+        <decoder name="local_decoder_example">
+          <program_name>local_decoder_example</program_name>
+        </decoder>
+
+        <decoder name="android_decoder_02">
+          <prematch>\.*Finsky</prematch>
+          <regex>\.*Successful (install) of (\.+) \.*</regex>
+          <order>action_name,package_name</order>
+        </decoder>
+
+        <!--
+        - Syslog > Logstash > JSON Decoders
+        - Author: Thanh Pham Tien <ptthanh@tma.com.vn>
+        - Sun 22 Aug 2021 04:52:18 PM +07
+        -->
+        <!--
+          ... itecture":"x86_64"} LOGSTASH[-]: {"log":{"file":{"path":"/var/lib/docker/containers/1c1acb722c1d2435ad2dbcd14e8df67affc2461680961ea0956251cc127e4be0/1c1acb722c1d2435ad2dbcd14e8df67affc2461680961ea0956251cc127e4be0-json.log"},"offset":3925002},"docker":{"container":{"labels":{"com_docker_compose_container-number":"1","com_docker_compose_version":"1.27.3","org_label-schema_schema-version":"1.0","com_docker_compose_project":"wazuh-server","org_label-schema_vendor":"Amazon","com_docker_compose_config-hash":"3408ccf455a0242ee9259f7c12137f9e2a93d81f879ece6186732e325c346bbb","org_label-schema_license":"Apache-2.0","com_docker_compose_service":"wazuh_kibana","org_label-schema_name":"opendistroforelasticsearch-kibana","org_opencontainers_image_created":"2020-11-13 00:00:00+00:00","org_opencontainers_image_title":"CentOS Base Image","org_label-schema_vcs-url":"https://github.com/opendistro-for-elasticsearch/opendistro-build","com_docker_compose_project_config_files":"docker-compose.yaml","org_opencontainers_image_licenses":"GPL-2.0-only","org_label-schema_build-date":"21.04.05","org_label-schema_version":"1.13.2","org_opencontainers_image_vendor":"CentOS","com_docker_compose_project_working_dir":"/data/workspace/omnivista/wazuh-server","com_docker_compose_oneoff":"False","org_label-schema_url":"https://opendistro.github.io"}}},"message":"{\"type\":\"error\",\"@timestamp\":\"2021-08-22T09:43:36Z\",\"tags\":[\"connection\",\"client\",\"error\"],\"pid\":33,\"level\":\"error\",\"error\":{\"message\":\"140005692856192:error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown:../deps/openssl/openssl/ssl/record/rec_layer_s3.c:1544:SSL alert number 46\\n\",\"name\":\"Error\",\"stack\":\"Error: 140005692856192:error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown:../deps/openssl/openssl/ssl/record/rec_layer_s3.c:1544:SSL alert number 46\\n\"},\"message\":\"140005692856192:error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown:../deps/openssl/openssl/ssl/record/rec_layer_s3.c:1544:SSL alert number 46\\n\"}","ecs":{"version":"1.8.0"},"input":{"type":"container"},"@timestamp":"2021-08-22T09:43:36.258Z","@version":"1","container":{"id":"1c1acb722c1d2435ad2dbcd14e8df67affc2461680961ea0956251cc127e4be0","labels":{"com_docker_compose_container-number":"1","com_docker_compose_version":"1.27.3","org_label-schema_schema-version":"1.0","com_docker_compose_project":"wazuh-server","org_label-schema_vendor":"Amazon","com_docker_compose_config-hash":"3408ccf455a0242ee9259f7c12137f9e2a93d81f879ece6186732e325c346bbb","org_label-schema_license":"Apache-2.0","org_opencontainers_image_created":"2020-11-13 00:00:00+00:00","org_label-schema_name":"opendistroforelasticsearch-kibana","com_docker_compose_service":"wazuh_kibana","org_opencontainers_image_title":"CentOS Base Image","org_label-schema_vcs-url":"https://github.com/opendistro-for-elasticsearch/opendistro-build","org_label-schema_build-date":"21.04.05","com_docker_compose_project_config_files":"docker-compose.yaml","org_opencontainers_image_licenses":"GPL-2.0-only","org_label-schema_version":"1.13.2","org_opencontainers_image_vendor":"CentOS","com_docker_compose_project_working_dir":"/data/workspace/omnivista/wazuh-server","com_docker_compose_oneoff":"False","org_label-schema_url":"https://opendistro.github.io"},"name":"wazuh-server_wazuh_kibana_1","image":{"name":"wazuh/wazuh-kibana-odfe:4.1.5"}},"tags":["beats_input_codec_plain_applied"],"host":{"architecture":"x86_64","mac":["02:42:ac:18:00:05"],"id":"44ccc339d95bd51386fcfc5d8f041927","ip":["172.24.0.5"],"name":"50c6bca93085","containerized":true,"os":{"family":"redhat","type":"linux","platform":"centos","kernel":"5.4.0-77-generic","name":"CentOS Linux","codename":"Core","version":"7 (Core)"},"hostname":"50c6bca93085"},"agent":{"id":"bb94ac15-7ad7-4714-9891-4c86678b4980","type":"filebeat","name":"50c6bca93085","ephemeral_id":"804fbf8d-23f8-4981-8269-d4a3db256aa6","version":"7.12.0","hostname":"50c6bca93085"},"stream":"stdout"}
+          -->
+        <decoder name="syslog_logstash_json">
+          <prematch>LOGSTASH[-]: </prematch>
+          <plugin_decoder offset="after_prematch">JSON_Decoder</plugin_decoder>
+        </decoder>
+    local_rules.xml: |
+      <!-- Local rules -->
+
+      <!-- Modify it at your will. -->
+      <!-- Copyright (C) 2015-2020, Wazuh Inc. -->
+
+      <!-- Example -->
+      <group name="local,syslog,sshd,">
+
+        <!--
+        Dec 10 01:02:02 host sshd[1234]: Failed none for root from 1.1.1.1 port 1066 ssh2
+        -->
+        <rule id="100001" level="5">
+          <if_sid>5716</if_sid>
+          <srcip>1.1.1.1</srcip>
+          <description>sshd: authentication failed from IP 1.1.1.1.</description>
+          <group>authentication_failed,pci_dss_10.2.4,pci_dss_10.2.5,</group>
+        </rule>
+
+      </group>
+
+      <!--
+      - Syslog > Logstash > JSON Decoders
+      - Author: Thanh Pham Tien <ptthanh@tma.com.vn>
+      - Sun 22 Aug 2021 04:52:18 PM +07
+      -->
+
+      <group name="syslog">
+
+        <!--
+        Aug 22 09:43:36 {"hostname":"50c6bca93085","os":{"kernel":"5.4.0-77-generic","codename":"Core","name":"CentOS Linux","family":"redhat","type":"linux","version":"7 (Core)","platform":"centos"},"ip":["172.24.0.5"],"containerized":true,"name":"50c6bca93085","id":"44ccc339d95bd51386fcfc5d8f041927","mac":["02:42:ac:18:00:05"],"architecture":"x86_64"} LOGSTASH[-]: {"log":{"file":{"path":"/var/lib/docker/containers/1c1acb722c1d2435ad2dbcd14e8df67affc2461680961ea0956251cc127e4be0/1c1acb722c1d2435ad2dbcd14e8df67affc2461680961ea0956251cc127e4be0-json.log"},"offset":3925002},"docker":{"container":{"labels":{"com_docker_compose_container-number":"1","com_docker_compose_version":"1.27.3","org_label-schema_schema-version":"1.0","com_docker_compose_project":"wazuh-server","org_label-schema_vendor":"Amazon","com_docker_compose_config-hash":"3408ccf455a0242ee9259f7c12137f9e2a93d81f879ece6186732e325c346bbb","org_label-schema_license":"Apache-2.0","com_docker_compose_service":"wazuh_kibana","org_label-schema_name":"opendistroforelasticsearch-kibana","org_opencontainers_image_created":"2020-11-13 00:00:00+00:00","org_opencontainers_image_title":"CentOS Base Image","org_label-schema_vcs-url":"https://github.com/opendistro-for-elasticsearch/opendistro-build","com_docker_compose_project_config_files":"docker-compose.yaml","org_opencontainers_image_licenses":"GPL-2.0-only","org_label-schema_build-date":"21.04.05","org_label-schema_version":"1.13.2","org_opencontainers_image_vendor":"CentOS","com_docker_compose_project_working_dir":"/data/workspace/omnivista/wazuh-server","com_docker_compose_oneoff":"False","org_label-schema_url":"https://opendistro.github.io"}}},"message":"{\"type\":\"error\",\"@timestamp\":\"2021-08-22T09:43:36Z\",\"tags\":[\"connection\",\"client\",\"error\"],\"pid\":33,\"level\":\"error\",\"error\":{\"message\":\"140005692856192:error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown:../deps/openssl/openssl/ssl/record/rec_layer_s3.c:1544:SSL alert number 46\\n\",\"name\":\"Error\",\"stack\":\"Error: 140005692856192:error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown:../deps/openssl/openssl/ssl/record/rec_layer_s3.c:1544:SSL alert number 46\\n\"},\"message\":\"140005692856192:error:14094416:SSL routines:ssl3_read_bytes:sslv3 alert certificate unknown:../deps/openssl/openssl/ssl/record/rec_layer_s3.c:1544:SSL alert number 46\\n\"}","ecs":{"version":"1.8.0"},"input":{"type":"container"},"@timestamp":"2021-08-22T09:43:36.258Z","@version":"1","container":{"id":"1c1acb722c1d2435ad2dbcd14e8df67affc2461680961ea0956251cc127e4be0","labels":{"com_docker_compose_container-number":"1","com_docker_compose_version":"1.27.3","org_label-schema_schema-version":"1.0","com_docker_compose_project":"wazuh-server","org_label-schema_vendor":"Amazon","com_docker_compose_config-hash":"3408ccf455a0242ee9259f7c12137f9e2a93d81f879ece6186732e325c346bbb","org_label-schema_license":"Apache-2.0","org_opencontainers_image_created":"2020-11-13 00:00:00+00:00","org_label-schema_name":"opendistroforelasticsearch-kibana","com_docker_compose_service":"wazuh_kibana","org_opencontainers_image_title":"CentOS Base Image","org_label-schema_vcs-url":"https://github.com/opendistro-for-elasticsearch/opendistro-build","org_label-schema_build-date":"21.04.05","com_docker_compose_project_config_files":"docker-compose.yaml","org_opencontainers_image_licenses":"GPL-2.0-only","org_label-schema_version":"1.13.2","org_opencontainers_image_vendor":"CentOS","com_docker_compose_project_working_dir":"/data/workspace/omnivista/wazuh-server","com_docker_compose_oneoff":"False","org_label-schema_url":"https://opendistro.github.io"},"name":"wazuh-server_wazuh_kibana_1","image":{"name":"wazuh/wazuh-kibana-odfe:4.1.5"}},"tags":["beats_input_codec_plain_applied"],"host":{"architecture":"x86_64","mac":["02:42:ac:18:00:05"],"id":"44ccc339d95bd51386fcfc5d8f041927","ip":["172.24.0.5"],"name":"50c6bca93085","containerized":true,"os":{"family":"redhat","type":"linux","platform":"centos","kernel":"5.4.0-77-generic","name":"CentOS Linux","codename":"Core","version":"7 (Core)"},"hostname":"50c6bca93085"},"agent":{"id":"bb94ac15-7ad7-4714-9891-4c86678b4980","type":"filebeat","name":"50c6bca93085","ephemeral_id":"804fbf8d-23f8-4981-8269-d4a3db256aa6","version":"7.12.0","hostname":"50c6bca93085"},"stream":"stdout"}
+        -->
+        <rule id="100002" level="5">
+          <decoded_as>syslog_logstash_json</decoded_as>
+          <description>filebeat log</description>
+        </rule>
+
+      </group>
+
+  odfe:
+    elasticsearch.yml:
+      network.host: 0.0.0.0
+
+      # node.roles: [ master, ingest, remote_cluster_client ]
+
+      # minimum_master_nodes need to be explicitly set when bound on a public IP
+      # set to 1 to allow single node clusters
+      # Details: https://github.com/elastic/elasticsearch/pull/17288
+      discovery.zen.minimum_master_nodes: 1
+
+      # # Breaking change in 7.0
+      # # https://www.elastic.co/guide/en/elasticsearch/reference/7.0/breaking-changes-7.0.html#breaking_70_discovery_changes
+      # cluster.initial_master_nodes: 
+      #    - elasticsearch1
+      #    - docker-test-node-1 
+      ######## Start OpenDistro for Elasticsearch Security Configuration ########
+      # WARNING: revise all the lines below before you go into production
+      opendistro_security.ssl.transport.pemcert_filepath: esnode.pem
+      opendistro_security.ssl.transport.pemkey_filepath: esnode-key.pem
+      opendistro_security.ssl.transport.pemtrustedcas_filepath: root-ca.pem
+      opendistro_security.ssl.transport.enforce_hostname_verification: false
+      opendistro_security.ssl.http.enabled: true
+      opendistro_security.ssl.http.pemcert_filepath: esnode.pem
+      opendistro_security.ssl.http.pemkey_filepath: esnode-key.pem
+      opendistro_security.ssl.http.pemtrustedcas_filepath: root-ca.pem
+      opendistro_security.allow_unsafe_democertificates: false
+      opendistro_security.allow_default_init_securityindex: true
+
+      # https://opendistro.github.io/for-elasticsearch-docs/docs/troubleshoot/tls/
+      # If parts of your DN contain special characters (e.g. a comma), make sure you escape it in your configuration
+      # 'CN=node-0.example.com,OU=SSL,O=My\, Test,L=Test,C=DE'
+      opendistro_security.nodes_dn:
+        - CN=elk-node
+      opendistro_security.authcz.admin_dn:
+        - CN=kirk
+
+      opendistro_security.audit.type: internal_elasticsearch
+      opendistro_security.enable_snapshot_restore_privilege: true
+      opendistro_security.check_snapshot_restore_write_privileges: true
+      opendistro_security.restapi.roles_enabled: ["all_access", "kibana_read_only", "security_rest_api_access", "service_full_access"]
+      opendistro_security.system_indices.enabled: true
+      opendistro_security.system_indices.indices: [".opendistro-alerting-config", ".opendistro-alerting-alert*", ".opendistro-anomaly-results*", ".opendistro-anomaly-detector*", ".opendistro-anomaly-checkpoints", ".opendistro-anomaly-detection-state"]
+
+      cluster.routing.allocation.disk.threshold_enabled: false
+      node.max_local_storage_nodes: 3
+      ######## End OpenDistro for Elasticsearch Security Configuration ########
+
+      opendistro.index_state_management.enabled: true
+      opendistro.index_state_management.job_interval: 1
+      opendistro.index_state_management.coordinator.sweep_period: 5m
+
+    config.yml:
+      _meta:
+        type: "config"
+        config_version: 2
+
+      config:
+        dynamic:
+          http:
+            anonymous_auth_enabled: false
+            xff:
+              enabled: false
+              # internalProxies: '192\.168\.0\.10|192\.168\.0\.11' # regex pattern
+              internalProxies: '.*' # trust all internal proxies, regex pattern
+              remoteIpHeader:  'x-forwarded-for'
+
+          authc:
+            internal_auth:
+              order: 0
+              description: "HTTP basic authentication using the internal user database"
+              http_enabled: true
+              transport_enabled: true
+              http_authenticator:
+                type: basic
+                challenge: false
+              authentication_backend:
+                type: internal
+
+            openid_auth:
+              http_enabled: true
+              transport_enabled: true
+              order: 1
+              http_authenticator:
+                type: openid
+                challenge: false
+                config:
+                  subject_key: preferred_username
+                  roles_key: roles
+                  openid_connect_url: https://im.dev.myovcloud.com/auth/realms/Netaosrke2/.well-known/openid-configuration
+                  # openid_connect_url: https://gist.githubusercontent.com/tienthanh2509/8c5233c70bb82396a47607c80ddd7fe4/raw/58fffe7cd8f004fac6a674641e7b5f6b3dea68ef/ovng-keycloak-oidc.json
+                  enable_ssl: true
+                  verify_hostnames: true
+                  # openid_connect_idp.enable_ssl: true
+                  # openid_connect_idp.verify_hostnames: false
+                  # openid_connect_idp.pemtrustedcas_filepath:
+              authentication_backend:
+                type: noop
+
+          authz:
+        #    auth_failure_listeners:
+        #      ip_rate_limiting:
+        #        type: ip
+        #        allowed_tries: 10
+        #        time_window_seconds: 3600
+        #        block_expiry_seconds: 600
+        #        max_blocked_clients: 100000
+        #        max_tracked_clients: 100000
+        #      internal_authentication_backend_limiting:
+        #        type: username
+        #        authentication_backend: intern
+        #        allowed_tries: 10
+        #        time_window_seconds: 3600
+        #        block_expiry_seconds: 600
+        #        max_blocked_clients: 100000
+        #        max_tracked_clients: 100000
+
+    internal_users.yml:
+      # This is the internal user database
+      # The hash value is a bcrypt hash and can be generated with plugin/tools/hash.sh
+
+      _meta:
+        type: "internalusers"
+        config_version: 2
+
+      # Define your internal users here
+
+      ## Demo users
+
+      #password is: "2KAnCG7yDsg9XsKW"
+      admin:
+        hash: "$2a$12$1lQsr2431WdQrsmxesB35ePjsXcbV4FzG4IPQpLy4t7FOQB0fmDA2"
+        reserved: true
+        backend_roles:
+        - "admin"
+        description: "Demo admin user"
+
+      #password is: QDZCWba3BFKeYzUx
+      kibanaserver:
+        hash: "$2y$12$u42z/zcjWjsjkt1dEZFaxOOo8zyyH4FkGq8VY04OEhGefwkQ48NAC"
+        reserved: true
+        description: "Demo kibanaserver user"
+
+      #password is: 387spPbaMgP8AUcv
+      kibanaro:
+        hash: "$2y$12$ZXGPod5HhP9oyfDgrmhgp.64BlbL.Qwk6By49egAAE3FUoeH6oDtO"
+        reserved: false
+        backend_roles:
+        - "kibanauser"
+        - "readall"
+        attributes:
+          attribute1: "value1"
+          attribute2: "value2"
+          attribute3: "value3"
+        description: "Demo kibanaro user"
+
+      #password is: uWhZMAM9cCVjVyCP
+      logstash:
+        hash: "$2y$12$ADX9Z/hFPImVm4eMuvEH/eKiEXHLDPIfRcwuRC/Rs1JsCBdqgV31C"
+        reserved: false
+        backend_roles:
+        - "logstash"
+        description: "Demo logstash user"
+
+      #password is: WeMkM5deY4EJS8Gw
+      readall:
+        hash: "$2y$12$Bcs5LXWkp6g5utdKUQQ9Xe/nA2VszXCIcC7B9uPG0OxEI/ALcb.um"
+        reserved: false
+        backend_roles:
+        - "readall"
+        description: "Demo readall user"
+
+      #password is: NpSzMJ4aUSSPtwxy
+      snapshotrestore:
+        hash: "$2y$12$JAWgCP1gPriDlqWZ0/a8oOFiUE2Rk5LiWcdBNQwBfgKdiYnUdbiLa"
+        reserved: false
+        backend_roles:
+        - "snapshotrestore"
+        description: "Demo snapshotrestore user"
+
+      ## OV custom service account here
+
+      #password is: vgY9VsYGX45EPWdQ
+      fluentd:
+        hash: $2y$12$hLzYP5bM0Yabm4gT3Thev.u1mtp7CFbmjxOGQYrF8ln741LarXBaG
+        reserved: false
+        backend_roles:
+        - fluentd
+        description: "OV log forwarder"
+
+      #password is: pnafZ6NYpMyuhr6c
+      support:
+        hash: $2a$12$Q5g3n5dWDDGj5H.wp7kFf.91Q5B62SfVMbBVtLTXCq4YsUp8dWcDa
+        reserved: false
+        backend_roles:
+        - readall
+        description: "Support account"
+
+    root-ca.pem: |
+      -----BEGIN CERTIFICATE-----
+      MIIE+jCCAuKgAwIBAgIEX9BztDANBgkqhkiG9w0BAQsFADAOMQwwCgYDVQQDDANl
+      bGswHhcNMjAxMjA5MDY1MDI4WhcNMzAxMjA5MDY1MDI4WjAOMQwwCgYDVQQDDANl
+      bGswggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCHs6zNwOQ7XO4jEMEu
+      Jjuhp/mO5Wx474QDPLitD8CfFrsIBFhGuTxXT7mynE0MUfyvMSs6XkFmihHvFU0e
+      NvAFYvrcsG7dQtG2gU4bd3V+ndLRlCdCB5vjPuGtrSgfu3cfuzezzsey1s5VLDy4
+      Wehy4QeLIekb+OZ69t3EAF8DGI2DEvD+yhRke0Axise6KFII123Qh2BE37z1a7wR
+      91cJI485q43HOttWRR/vxPQVBKNMEn+j6DWqCLICJGWLO5ct9EyMCTzP/wB3AjOw
+      6KLlidOFL9sinUeHKy+s6GLZ8sffIgFDV+MAI7T6tIVrJI6ieYP4DXcQuwAL3Cae
+      XlsfBek0Q8By4DQiPka5Nqb9UKA+ie9wmSQfhY2mg2jyrDg5cKnvy+7ijbqc15bF
+      NWYJ1IFcGkUb0janos1TybPitbAUmS/Q3tRcd42eh8PCNIBi9kdflOpolmWQkH4V
+      LcdZS4iP2PgF+wPrr2dlw/V8LdLL23zRbUypEoNmgluPIZHZPV7KajEBYgTGNkOx
+      068CXjrSA/qGdS9einzP32eRRPKSTTbAsFbLxUKZ+Gd9z0hgV2uhC5H+SkOaxFWt
+      aCYwNIXDI4uSXmdT7tdEy/zByWjIlMsI0qhR02TI2MerHpTT1FuYQkOX+q/j5ky1
+      omhunUqPiyb5yTsv8R8dFz49iwIDAQABo2AwXjAPBgNVHRMBAf8EBTADAQH/MB8G
+      A1UdIwQYMBaAFJDS6o1jiMmZoHkd3hF/zVIUQ/HWMB0GA1UdDgQWBBSQ0uqNY4jJ
+      maB5Hd4Rf81SFEPx1jALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQELBQADggIBAAMm
+      5y2gCpeFshC9nZYTABW0/A+eTuJr3t9fUecsaBIz9gVuhoRNLvXnZj6NYqW/RtwY
+      pfuHIKSwCQJnEi7cpr87UwiFbEfBBEL1zPZznSMT1Ts4+gORBRvWHlepZls28xK8
+      ehB+E4YvLI8gUfPc+stm4lOeH6olmW37i183tNBrIfWjFuXq6soswXW3syAhphrQ
+      t4v5jWdcskQDOW9D5zXWI/bId+LcLkTHqSEBOM5a89GIDpavHNneAArxF4gx3wiv
+      B4JsPo0+5vztY/4AM3h6RbCyCrESaofSS9JHeEOQoOzOApdClM7dGrdvAXGyyOn7
+      btIyyXv3rQ7IPkCEAK5gFxqmxfHGN/ldeBaH/FFtwPywXUyU0rXuwopvt4u7RYaQ
+      uE37jGTpgO5/jukVcdyF+K9Zi5nEBStBQ8FJA2Xohej2dv2jyDRKfD8cAPiZ0YR8
+      xYwuzvWIf6pMod3DOS8Z0GN5hMP3/6ZCMy2S4BbkGFdkR86a9Cn+8LP6BEK0DiY+
+      T+Mj4kYGNO5sj0A1gzLtcp4JF8gMGv6BtWUYUkz5fIh/HbeOroggQNBEJ/g+rpnw
+      brJBNtWMpLQMzVAV6wzWjiJu9TmeGLjgjCMeNPoWbODYxA7MzhRDUXKY8h+fZE2F
+      fcKnnsin+OmoUXPsBJg3CmYI4OxgQ1nyyQcs5xNx
+      -----END CERTIFICATE-----
+
+    esnode.pem: |
+      -----BEGIN CERTIFICATE-----
+      MIIFEDCCAvigAwIBAgIEX9CBRjANBgkqhkiG9w0BAQsFADAOMQwwCgYDVQQDDANl
+      bGswHhcNMjAxMjA5MDc0ODIyWhcNMjUxMjA5MDc0ODIyWjATMREwDwYDVQQDDAhl
+      bGstbm9kZTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBANUvhX5Eb7pU
+      l0JMd0otRvoIhL6l4rSZE1KfOqL5JrRhbUCUzjM14In8+L04l1UF46d7Unl5x8mx
+      0V0ZVEPmnGMpsuZFpT+83JrIYo1wcaJpwQu+kn2lXu0CkSPMB8ln9Rb3yUVdqcHP
+      pU0JxA6RQws77DEO/gypsaGn6IeB3nNJLyS7ZEfDVcua4sJg31iXSx/F65C/c65u
+      ZjzuYt3ch4gR+MrEip1HGn2VmlkHZkXj4PWrEl+rv+g0RwTDTd2NQB6qXyifEpMb
+      r16WfrakVoI0ILwdJTmuBM9zWhueqPZQ0LunTbIwXMrd7SlllopllmNyNQnxKNhm
+      OlARjxKs/TykFFCVXTe0FLow9kf/YUnxsbrrd6xS29/ulJok2Hzc3hT01yXA21ny
+      wNyJaICI8t9ZVMzcrstzH3emkR2S8dMiD0B+Pyw19rRiJhLLXvurYMiUOciURRO6
+      wx2eACO0GM4wqEuIBUrklhjHThRcqE6s398r9+GyPTWmXJs7KVasIzAyxO/pNS9D
+      1CmqXBiF4SJhM1CNyrzp7wMsyGYkpC8xYpHClrHwDRh0ao32G9Nqf41Icd6kV7f4
+      fVGfSfTFEWUY3CmGRWnbqiKRSAObG40ikATn/VQ4KVNIzXnz0sDr7jAuISXDyuJR
+      Jt9AETlIASC0xKwIpoXht74bazpAXonTAgMBAAGjcTBvMA4GA1UdDwEB/wQEAwIF
+      oDAfBgNVHSMEGDAWgBSQ0uqNY4jJmaB5Hd4Rf81SFEPx1jAdBgNVHQ4EFgQUsS5J
+      B3ROVFmmnN//dja8fZRgpqswHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
+      MA0GCSqGSIb3DQEBCwUAA4ICAQAs79nPnFVQ/R6qyp6ynsD1LMtsFnGF1KTG7OM0
+      QebrtwxLgLVLop7ZdggU/cqFrrchajOB28g897uWuBX+MbXRXYiZy02H+lPT1Dhm
+      h6L63hc51Qn9KMRdBJIUWpbxgVs7PDcY+PJ0Fs6EBfgLe8bm13a/YvL140T1prbP
+      MoDcwmsEoJLPdtfuyY2hZ1g3TZvwA/z0sWQoah9Ck4Nq4pGOjicxoMm/nW5yUHdX
+      7dp6wLJM50MrdD76Nwa+95KiFo1ZpGVioaB470QJ2LDGWmhFNOShzcLRmAj2lRFS
+      QcPEKm1SZb3NPkc9xXV4ECJLBjSDXa06TUP7kOcsgS81HIwrAYK8Ky7ee5GhWCFh
+      0mxCeGzhSWxCkZrVQnXGXOKMHSjt2wRaQAOahUZmVk3lhpe7wzzFksJ0YMVySCSf
+      BMUEun+6TW8yWqtfW3IKeOggp4W0nfbu9Z13leFHgDKxudKUtfJyatsKXfR6++w5
+      LrTxU//yK9TRDgHYNgVH5/6AyBgQ6ZRd2xcRUoNfBva+LL+UEtmbS4DfQ18MrSQp
+      5cTzuSjtihNGv2FpKuOde/6IEmSIkSL/30bTsPIFbUTin+p/qxnimh6kcH9ByWUc
+      N0/K/uFQzVaaHONrqXKmanR4tv10lbua6AoHA+f4GqVBj3OHNo2WiMEWyJW/HlWD
+      Kc7uiw==
+      -----END CERTIFICATE-----
+
+    esnode-key.pem: |
+      -----BEGIN PRIVATE KEY-----
+      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
+      bmg6BKcyKXrr37PdqB6R7Ykw7Z0K8Sw=
+      -----END PRIVATE KEY-----
+
+    kirk.pem: |
+      -----BEGIN CERTIFICATE-----
+      MIIFAjCCAuqgAwIBAgIEX9B+6DANBgkqhkiG9w0BAQsFADAOMQwwCgYDVQQDDANl
+      bGswHhcNMjAxMjA5MDczODE2WhcNMjUxMjA5MDczODE2WjAPMQ0wCwYDVQQDDARr
+      aXJrMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA25JyRWm/74WX2LkT
+      rmbJT4R+ct6wIaKdAfCXxXB455pyVyZh8nq3bY/NSfyh5E+3CIxxBHq+gwpbJMcu
+      NsfJ7B34A5LCuhjtwkffVKOAnCf8Y7IPDWoeexGU4Or9aFnkzSIe8/odqXGpmNpy
+      vip/G2x9YseVmcL2gQ65dvneYXFx2j6rZAMgirBqvx3hxTx0u9R20WUlib/YprB+
+      8gbq2XZM6bzrLYtkoM+BCht0KUoRUtZnCDnPOLM9O8nqP4nXyTbNk0DGG/ABLAWH
+      PCENNOP7/mjVLU1wGEiBryvh6tUp7jNl+BjlPrgNtfpUse8nMunWfb6vSD0kkKfy
+      0loIuGpBQIje17E1kWv8iIh4IAq1Chgm3RYj9Ne86DcmNhqugU0mY5mWuCf8O1HD
+      YS9JBxSF0A1hYwuYlYIfE0Y8XTD3QOJbMM+XgqRat5B+rObYl9oHowotu9o/l+94
+      wJat2n1+xzF0pn5313zgMvcvZElgfXljqlCDOFb5ORGhqpjcnCx9SdN4KSPsBlYd
+      0T1g/HSh4HTfTZx1gYrtrKQ3BwUeFJTEW6QvZIFR7bJ5jfbcn3Y0zHepLzEiGaoj
+      GwPnEVe8XW6LEzcOpBxSUiufJ2/XScTfy7XLeGb8pAmCYG5tG67pW3LeI7aQ9YRo
+      3c2qNCtzp5jRhznUepcbeAboha0CAwEAAaNnMGUwDgYDVR0PAQH/BAQDAgWgMB8G
+      A1UdIwQYMBaAFJDS6o1jiMmZoHkd3hF/zVIUQ/HWMB0GA1UdDgQWBBQXF3Nv+zDX
+      y2wlWTq6Bn35nZ0x9DATBgNVHSUEDDAKBggrBgEFBQcDAjANBgkqhkiG9w0BAQsF
+      AAOCAgEAA3MWE9aJnskeR7fMePc+E/Ee0bUZRz7Q+HpZGwYW2zuMDjWSl1P+o1qw
+      0au31abfdntU9BJSbQNj8RG9zqqfb9Tec770HRHsVQo9njA1o8YFvmLGa50HMvrU
+      UfYD1xdYj6z4LZufBfaN3KfOaQuKg1Mlz6i0kJNk3DwzAIzp12LBz18fAz6xDx2a
+      g6NxFUdUpzGxvZ4OhP6ARWv4YKX//CJMQl58Mm7Mr1Q3NrVWjjxWfHXlh2N04J0F
+      NTMCZIMbNReDY0ZBOopk1MwKiL/kir76qfpDz4BKFNjJg7piAooBBppZh2w0Qlm/
+      384DerAotDKj5lhdkwrWkLTIiMNtIGQBZoLy5vvtqd5z7FkSEe+cqCnMxRZKU2ja
+      IPBRuuV145RVGMXysY8OFdln5sJYoKVvOZHLKRof8MnaxUafhPIhPcjdpCScfatX
+      iEfEXOIQrrFOtNznmYt4yVWL5rtvDrnbSAps6zGNR3wTiW0W/tHkyXiU6o28+A5J
+      ineT/Xb4aGRu/pB9ELX/RZXUeKPifV2A9VSLUASEvRV6M+k9TJszr0pCRwlrw8c+
+      BtAjcFiX2YqAQSn8JAAotkXO6V5xcq45ALt+ftdriXh7KVRYjFt/rrb4c9jA9YGr
+      L4b/FAw9v7eJx84Ge1GdtveZ71J05cDC04j4fgiz42jzL4IDnTM=
+      -----END CERTIFICATE-----
+
+    kirk-key.pem: |
+      -----BEGIN PRIVATE KEY-----
+      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
+      z7wF0HbKrX8Hzpqf1+LYq3UDenwvlMt4
+      -----END PRIVATE KEY-----
+
+  ####################################################################
+  # Kibana settings
+  ####################################################################
+  kibana:
+    kibana.crt: |
+      -----BEGIN CERTIFICATE-----
+      MIIFEDCCAvigAwIBAgIEX9CBRjANBgkqhkiG9w0BAQsFADAOMQwwCgYDVQQDDANl
+      bGswHhcNMjAxMjA5MDc0ODIyWhcNMjUxMjA5MDc0ODIyWjATMREwDwYDVQQDDAhl
+      bGstbm9kZTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBANUvhX5Eb7pU
+      l0JMd0otRvoIhL6l4rSZE1KfOqL5JrRhbUCUzjM14In8+L04l1UF46d7Unl5x8mx
+      0V0ZVEPmnGMpsuZFpT+83JrIYo1wcaJpwQu+kn2lXu0CkSPMB8ln9Rb3yUVdqcHP
+      pU0JxA6RQws77DEO/gypsaGn6IeB3nNJLyS7ZEfDVcua4sJg31iXSx/F65C/c65u
+      ZjzuYt3ch4gR+MrEip1HGn2VmlkHZkXj4PWrEl+rv+g0RwTDTd2NQB6qXyifEpMb
+      r16WfrakVoI0ILwdJTmuBM9zWhueqPZQ0LunTbIwXMrd7SlllopllmNyNQnxKNhm
+      OlARjxKs/TykFFCVXTe0FLow9kf/YUnxsbrrd6xS29/ulJok2Hzc3hT01yXA21ny
+      wNyJaICI8t9ZVMzcrstzH3emkR2S8dMiD0B+Pyw19rRiJhLLXvurYMiUOciURRO6
+      wx2eACO0GM4wqEuIBUrklhjHThRcqE6s398r9+GyPTWmXJs7KVasIzAyxO/pNS9D
+      1CmqXBiF4SJhM1CNyrzp7wMsyGYkpC8xYpHClrHwDRh0ao32G9Nqf41Icd6kV7f4
+      fVGfSfTFEWUY3CmGRWnbqiKRSAObG40ikATn/VQ4KVNIzXnz0sDr7jAuISXDyuJR
+      Jt9AETlIASC0xKwIpoXht74bazpAXonTAgMBAAGjcTBvMA4GA1UdDwEB/wQEAwIF
+      oDAfBgNVHSMEGDAWgBSQ0uqNY4jJmaB5Hd4Rf81SFEPx1jAdBgNVHQ4EFgQUsS5J
+      B3ROVFmmnN//dja8fZRgpqswHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
+      MA0GCSqGSIb3DQEBCwUAA4ICAQAs79nPnFVQ/R6qyp6ynsD1LMtsFnGF1KTG7OM0
+      QebrtwxLgLVLop7ZdggU/cqFrrchajOB28g897uWuBX+MbXRXYiZy02H+lPT1Dhm
+      h6L63hc51Qn9KMRdBJIUWpbxgVs7PDcY+PJ0Fs6EBfgLe8bm13a/YvL140T1prbP
+      MoDcwmsEoJLPdtfuyY2hZ1g3TZvwA/z0sWQoah9Ck4Nq4pGOjicxoMm/nW5yUHdX
+      7dp6wLJM50MrdD76Nwa+95KiFo1ZpGVioaB470QJ2LDGWmhFNOShzcLRmAj2lRFS
+      QcPEKm1SZb3NPkc9xXV4ECJLBjSDXa06TUP7kOcsgS81HIwrAYK8Ky7ee5GhWCFh
+      0mxCeGzhSWxCkZrVQnXGXOKMHSjt2wRaQAOahUZmVk3lhpe7wzzFksJ0YMVySCSf
+      BMUEun+6TW8yWqtfW3IKeOggp4W0nfbu9Z13leFHgDKxudKUtfJyatsKXfR6++w5
+      LrTxU//yK9TRDgHYNgVH5/6AyBgQ6ZRd2xcRUoNfBva+LL+UEtmbS4DfQ18MrSQp
+      5cTzuSjtihNGv2FpKuOde/6IEmSIkSL/30bTsPIFbUTin+p/qxnimh6kcH9ByWUc
+      N0/K/uFQzVaaHONrqXKmanR4tv10lbua6AoHA+f4GqVBj3OHNo2WiMEWyJW/HlWD
+      Kc7uiw==
+      -----END CERTIFICATE-----
+
+    kibana.key: |
+      -----BEGIN PRIVATE KEY-----
+      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
+      bmg6BKcyKXrr37PdqB6R7Ykw7Z0K8Sw=
+      -----END PRIVATE KEY-----
+
+    ca-certificates.txt: |
+      -----BEGIN CERTIFICATE-----
+      MIIE+jCCAuKgAwIBAgIEX9BztDANBgkqhkiG9w0BAQsFADAOMQwwCgYDVQQDDANl
+      bGswHhcNMjAxMjA5MDY1MDI4WhcNMzAxMjA5MDY1MDI4WjAOMQwwCgYDVQQDDANl
+      bGswggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCHs6zNwOQ7XO4jEMEu
+      Jjuhp/mO5Wx474QDPLitD8CfFrsIBFhGuTxXT7mynE0MUfyvMSs6XkFmihHvFU0e
+      NvAFYvrcsG7dQtG2gU4bd3V+ndLRlCdCB5vjPuGtrSgfu3cfuzezzsey1s5VLDy4
+      Wehy4QeLIekb+OZ69t3EAF8DGI2DEvD+yhRke0Axise6KFII123Qh2BE37z1a7wR
+      91cJI485q43HOttWRR/vxPQVBKNMEn+j6DWqCLICJGWLO5ct9EyMCTzP/wB3AjOw
+      6KLlidOFL9sinUeHKy+s6GLZ8sffIgFDV+MAI7T6tIVrJI6ieYP4DXcQuwAL3Cae
+      XlsfBek0Q8By4DQiPka5Nqb9UKA+ie9wmSQfhY2mg2jyrDg5cKnvy+7ijbqc15bF
+      NWYJ1IFcGkUb0janos1TybPitbAUmS/Q3tRcd42eh8PCNIBi9kdflOpolmWQkH4V
+      LcdZS4iP2PgF+wPrr2dlw/V8LdLL23zRbUypEoNmgluPIZHZPV7KajEBYgTGNkOx
+      068CXjrSA/qGdS9einzP32eRRPKSTTbAsFbLxUKZ+Gd9z0hgV2uhC5H+SkOaxFWt
+      aCYwNIXDI4uSXmdT7tdEy/zByWjIlMsI0qhR02TI2MerHpTT1FuYQkOX+q/j5ky1
+      omhunUqPiyb5yTsv8R8dFz49iwIDAQABo2AwXjAPBgNVHRMBAf8EBTADAQH/MB8G
+      A1UdIwQYMBaAFJDS6o1jiMmZoHkd3hF/zVIUQ/HWMB0GA1UdDgQWBBSQ0uqNY4jJ
+      maB5Hd4Rf81SFEPx1jALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQELBQADggIBAAMm
+      5y2gCpeFshC9nZYTABW0/A+eTuJr3t9fUecsaBIz9gVuhoRNLvXnZj6NYqW/RtwY
+      pfuHIKSwCQJnEi7cpr87UwiFbEfBBEL1zPZznSMT1Ts4+gORBRvWHlepZls28xK8
+      ehB+E4YvLI8gUfPc+stm4lOeH6olmW37i183tNBrIfWjFuXq6soswXW3syAhphrQ
+      t4v5jWdcskQDOW9D5zXWI/bId+LcLkTHqSEBOM5a89GIDpavHNneAArxF4gx3wiv
+      B4JsPo0+5vztY/4AM3h6RbCyCrESaofSS9JHeEOQoOzOApdClM7dGrdvAXGyyOn7
+      btIyyXv3rQ7IPkCEAK5gFxqmxfHGN/ldeBaH/FFtwPywXUyU0rXuwopvt4u7RYaQ
+      uE37jGTpgO5/jukVcdyF+K9Zi5nEBStBQ8FJA2Xohej2dv2jyDRKfD8cAPiZ0YR8
+      xYwuzvWIf6pMod3DOS8Z0GN5hMP3/6ZCMy2S4BbkGFdkR86a9Cn+8LP6BEK0DiY+
+      T+Mj4kYGNO5sj0A1gzLtcp4JF8gMGv6BtWUYUkz5fIh/HbeOroggQNBEJ/g+rpnw
+      brJBNtWMpLQMzVAV6wzWjiJu9TmeGLjgjCMeNPoWbODYxA7MzhRDUXKY8h+fZE2F
+      fcKnnsin+OmoUXPsBJg3CmYI4OxgQ1nyyQcs5xNx
+      -----END CERTIFICATE-----
+
+    kibana.yml:
+      # Kibana generic config
+      logging.verbose: false
+      server.name: kibana
+      server.host: "0.0.0.0"
+      # OIDC is not compatible with prefix
+      # server.basePath: "/wazuh"
+      # server.rewriteBasePath: true
+      server.compression.enabled: false
+
+      server.ssl.enabled: true
+      server.ssl.certificate: /certs/kibana.crt
+      server.ssl.key: /certs/kibana.key
+      # server.ssl.keyPassphrase: ""
+      server.ssl.certificateAuthorities: ["/certs/ca-certificates.txt"]
+      server.ssl.clientAuthentication: "none" # optional, required
+
+      # ElasticSearch config
+      # This line is pass via env, don't uncomment
+      #elasticsearch.hosts: ["https://{{ include "wazuh.fullname" . }}-elasticsearch-headless:9200"]
+      elasticsearch.ssl.verificationMode: certificate # full: verify hostname, certificate: verify cert only, none: skip verify
+      elasticsearch.ssl.certificateAuthorities: ["/certs/ca-certificates.txt"]
+      # elasticsearch.username: kibanaserver
+      # elasticsearch.password: QDZCWba3BFKeYzUx
+      elasticsearch.requestHeadersWhitelist: ["securitytenant","Authorization","x-forwarded-for"]
+
+      opendistro_security.multitenancy.enabled: false
+      opendistro_security.multitenancy.tenants.preferred: ["Global", "Private"]
+      opendistro_security.readonly_mode.roles: ["kibana_read_only"]
+
+      # Use this setting if you are running kibana without https
+      opendistro_security.cookie.secure: false
+
+      newsfeed.enabled: false
+      telemetry.optIn: false
+      telemetry.enabled: false
+
+      security.showInsecureClusterWarning: false
+      # server.defaultRoute: /app/discover
+
+      # -------------------------------------
+      # OpenID
+      # Enable OpenID authentication
+      opendistro_security.auth.type: openid
+
+      # The IdP metadata endpoint
+      opendistro_security.openid.connect_url: https://im.dev.myovcloud.com/auth/realms/Netaosrke2/.well-known/openid-configuration
+      # opendistro_security.openid.connect_url: https://gist.githubusercontent.com/tienthanh2509/8c5233c70bb82396a47607c80ddd7fe4/raw/58fffe7cd8f004fac6a674641e7b5f6b3dea68ef/ovng-keycloak-oidc.json
+
+      # The ID of the OpenID Connect client in your IdP
+      opendistro_security.openid.client_id: wazuh-dashboard
+
+      # The client secret of the OpenID Connect client
+      opendistro_security.openid.client_secret: a1c10fba-3a09-4a21-9c02-821a17988da9
+
+      opendistro_security.openid.scope: openid profile
+      opendistro_security.openid.header: Authorization
+
+      # The base of the redirect URL that will be sent to your IdP.
+      # Optional. Only necessary when Kibana is behind a reverse proxy, in which case it should be different than server.host and server.port in kibana.yml.
+      opendistro_security.openid.base_redirect_url: https://wazuh.prod-us.ovng.myovcloud.com
+
+    kibana_settings.sh: |
+      #!/bin/bash
+      # Wazuh Docker Copyright (C) 2021 Wazuh Inc. (License GPLv2)
+
+      WAZUH_MAJOR=4
+
+      ##############################################################################
+      # Wait for the Kibana API to start. It is necessary to do it in this container
+      # because the others are running Elastic Stack and we can not interrupt them.
+      #
+      # The following actions are performed:
+      #
+      # Add the wazuh alerts index as default.
+      # Set the Discover time interval to 24 hours instead of 15 minutes.
+      # Do not ask user to help providing usage statistics to Elastic.
+      ##############################################################################
+
+      ##############################################################################
+      # Customize elasticsearch ip
+      ##############################################################################
+      # sed -i "s|elasticsearch.hosts:.*|elasticsearch.hosts: $el_url|g" /usr/share/kibana/config/kibana.yml
+      # # disable multitenancy
+      # sed -i "s|opendistro_security.multitenancy.enabled:.*|opendistro_security.multitenancy.enabled: false|g" /usr/share/kibana/config/kibana.yml
+
+      # If KIBANA_INDEX was set, then change the default index in kibana.yml configuration file. If there was an index, then delete it and recreate.
+      # if [ "$KIBANA_INDEX" != "" ]; then
+      #   if grep -q 'kibana.index' /usr/share/kibana/config/kibana.yml; then
+      #     sed -i '/kibana.index/d' /usr/share/kibana/config/kibana.yml
+      #   fi
+      #     echo "kibana.index: $KIBANA_INDEX" >> /usr/share/kibana/config/kibana.yml
+      # fi
+
+      # For openid 302
+      # For basic auth 200
+      #
+      while [[ "$(curl -XGET -I  -s -o /dev/null -w '%{http_code}' -k https://127.0.0.1:5601/)" != "302" ]]; do
+        echo "Waiting for Kibana API. Sleeping 5 seconds"
+        sleep 5
+      done
+
+      # Prepare index selection.
+      echo "Kibana API is running"
+
+      default_index="/tmp/default_index.json"
+
+      cat > ${default_index} << EOF
+      {
+        "changes": {
+          "defaultIndex": "wazuh-alerts-${WAZUH_MAJOR}.x-*"
+        }
+      }
+      EOF
+
+      sleep 5
+      # Add the wazuh alerts index as default.
+      echo 'Add the wazuh alerts index as default.'
+      curl ${auth} -POST -k https://127.0.0.1:5601/api/kibana/settings -H "Content-Type: application/json" -H "kbn-xsrf: true" -d@${default_index}
+      rm -f ${default_index}
+
+      sleep 5
+      # Configuring Kibana TimePicker.
+      echo 'Configuring Kibana TimePicker.'
+      curl ${auth} -POST -k "https://127.0.0.1:5601/api/kibana/settings" -H "Content-Type: application/json" -H "kbn-xsrf: true" -d \
+      '{"changes":{"timepicker:timeDefaults":"{\n  \"from\": \"now-12h\",\n  \"to\": \"now\"}"}}'
+
+      echo "End settings"
+
+# Ingress
+ingress:
+  kibana:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+      nginx.ingress.kubernetes.io/rewrite-target: /
+    path: /
+    hosts:
+      - wazuh.prod-us.ovng.myovcloud.com
+    tls:
+     - secretName: ""
+       hosts:
+         - wazuh.prod-us.ovng.myovcloud.com
+
+  elasticsearch:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: nginx
+      nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+      nginx.ingress.kubernetes.io/rewrite-target: /$2
+      nginx.ingress.kubernetes.io/use-regex: "true"
+    path: /elasticsearch(/|$)(.*)
+    hosts:
+      - wazuh.prod-us.ovng.myovcloud.com
+    tls:
+     - secretName: ""
+       hosts:
+         - wazuh.prod-us.ovng.myovcloud.com
+
+# Logstash chart config
+# https://github.com/elastic/helm-charts/blob/master/logstash/values.yaml
+logstash:
+  replicas: 1
+
+  # Allows you to add any config files in /usr/share/logstash/config/
+  # such as logstash.yml and log4j2.properties
+  #
+  # Note that when overriding logstash.yml, `http.host: 0.0.0.0` should always be included
+  # to make default probes work.
+  logstashConfig: {}
+  #  logstash.yml: |
+  #    key:
+  #      nestedkey: value
+  #  log4j2.properties: |
+  #    key = value
+
+  # Allows you to add any pipeline files in /usr/share/logstash/pipeline/
+  ### ***warn*** there is a hardcoded logstash.conf in the image, override it first
+  logstashPipeline:
+    logstash.conf: |-
+      input {
+        beats {
+          port => 5044
+        }
+      }
+
+      output {
+        # stdout { codec => rubydebug }
+        # stdout { codec => json }
+
+        syslog {
+          # id => "client_logstash"
+          host => "ovng-wazuh-manager"
+          port => 514
+          protocol => "udp"
+          rfc => "rfc3164"
+          codec => json
+        }
+
+        elasticsearch {
+          hosts => ["https://ovng-wazuh-elasticsearch-headless:9200"]
+          user => "fluentd"
+          password => "vgY9VsYGX45EPWdQ"
+          # Disable ilm for compatibility with open distro elastic
+          ilm_enabled => false
+
+          ssl => true
+          ssl_certificate_verification => false
+          # cacert => '/etc/logstash/config/certs/ca.crt'
+
+          # index => "logstash-%{+YYYY.MM.dd}"
+          # index => "%{[@metadata][index]}"
+          index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+        }
+      }
+
+  # image: "docker.elastic.co/logstash/logstash"
+  # imageTag: "8.0.0-SNAPSHOT
+  image: "repo.myovcloud.com:5000/devops/logstash-syslog-oss"
+  imageTag: "6.8.23"
+  imagePullPolicy: "IfNotPresent"
+  imagePullSecrets: 
+    - name: regcred
+
+  logstashJavaOpts: "-Xmx1g -Xms1g"
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "1536Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1536Mi"
+
+  volumeClaimTemplate:
+    accessModes: [ "ReadWriteOnce" ]
+    resources:
+      requests:
+        storage: 1Gi
+
+  persistence:
+    enabled: false
+    annotations: {}
+  
+  terminationGracePeriod: 12
+
+  service:
+    type: ClusterIP
+    ports:
+    - name: udp-syslog
+      port: 514
+      targetPort: 514
+      protocol: UDP
+    - name: tcp-syslog
+      port: 514
+      targetPort: 514
+      protocol: TCP
+    - name: tcp-beats
+      port: 5044
+      targetPort: 5044
+      protocol: TCP
+
+# FileBeat chart config
+filebeat:
+  enabled: true
+  image: docker.elastic.co/beats/filebeat-oss
+
+  filebeatConfig:
+    filebeat.yml: |-
+      filebeat.inputs:
+      - type: log
+        paths:
+        - /var/lib/rancher/rke2/server/logs/*.log
+
+      - type: container
+        paths:
+          - /var/log/containers/*.log
+        processors:
+          - add_kubernetes_metadata:
+              host: ${NODE_NAME}
+              matchers:
+              - logs_path:
+                  logs_path: "/var/log/containers/"
+
+      # To enable hints based autodiscover, remove `filebeat.inputs` configuration and uncomment this:
+      # filebeat.autodiscover:
+      #  providers:
+      #    - type: kubernetes
+      #      node: ${NODE_NAME}
+      #      hints.enabled: true
+      #      hints.default_config:
+      #        type: container
+      #        paths:
+      #          - /var/log/containers/*${data.kubernetes.container.id}.log
+
+      # processors:
+        # - add_cloud_metadata:
+        # - add_host_metadata:
+        # - add_docker_metadata: ~
+        # - add_kubernetes_metadata: ~
+
+      # ---------------------------- Elasticsearch Output ----------------------------
+
+      # output.elasticsearch:
+      #   hosts: ['${ELASTICSEARCH_HOSTS}']
+      #   protocol: "https"
+
+      #   # SSL
+      #   ssl.verification_mode: "certificate"
+      #   ssl.certificate_authorities:
+      #     - /usr/share/filebeat/ca-certificates.txt
+
+      #   username: "${ELASTICSEARCH_USERNAME}"
+      #   password: "${ELASTICSEARCH_PASSWORD}"
+      #   max_retries: -1
+      #   backoff.max: 30s
+      #   timeout: 30s
+
+      #   index: "filebeat-%{[agent.version]}-%{+yyyy.MM.dd}"
+
+      # ------------------------------ Logstash Output -------------------------------
+      output.logstash:
+        # The Logstash hosts
+        hosts: ["ovng-logstash-headless:5044"]
+
+        # Optional SSL. By default is off.
+        # List of root certificates for HTTPS server verifications
+        #ssl.certificate_authorities: ["/etc/pki/root/ca.pem"]
+
+        # Certificate for SSL client authentication
+        #ssl.certificate: "/etc/pki/client/cert.pem"
+
+        # Client Certificate Key
+        #ssl.key: "/etc/pki/client/cert.key"
+
+      # ============================== Filebeat modules ==============================
+
+      filebeat.config.modules:
+        # Glob pattern for configuration loading
+        path: ${path.config}/modules.d/*.yml
+
+        # Set to true to enable config reloading
+        reload.enabled: false
+
+        # Period on which files under path should be checked for changes
+        #reload.period: 10s
+
+      # ======================= Elasticsearch template setting =======================
+
+      # OpenDistro unsupported
+      # https://opendistro.github.io/for-elasticsearch-docs/docs/troubleshoot/#beats
+      setup.ilm.enabled: false
+
+      setup.template.name: "filebeat"
+      setup.template.pattern: "filebeat-*"
+
+      queue.mem:
+        events: 4096
+        flush.min_events: 512
+        flush.timeout: 5s
+
+    system.yml: |-
+      # Module: system
+      # Docs: https://www.elastic.co/guide/en/beats/filebeat/7.10/filebeat-module-system.html
+
+      - module: system
+        # Syslog
+        syslog:
+          enabled: true
+
+          # Set custom paths for the log files. If left empty,
+          # Filebeat will choose the paths depending on your OS.
+          #var.paths:
+
+        # Authorization logs
+        auth:
+          enabled: true
+
+          # Set custom paths for the log files. If left empty,
+          # Filebeat will choose the paths depending on your OS.
+          #var.paths:
+
+    ca-certificates.txt: |
+      -----BEGIN CERTIFICATE-----
+      MIIE+jCCAuKgAwIBAgIEX9BztDANBgkqhkiG9w0BAQsFADAOMQwwCgYDVQQDDANl
+      bGswHhcNMjAxMjA5MDY1MDI4WhcNMzAxMjA5MDY1MDI4WjAOMQwwCgYDVQQDDANl
+      bGswggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQCHs6zNwOQ7XO4jEMEu
+      Jjuhp/mO5Wx474QDPLitD8CfFrsIBFhGuTxXT7mynE0MUfyvMSs6XkFmihHvFU0e
+      NvAFYvrcsG7dQtG2gU4bd3V+ndLRlCdCB5vjPuGtrSgfu3cfuzezzsey1s5VLDy4
+      Wehy4QeLIekb+OZ69t3EAF8DGI2DEvD+yhRke0Axise6KFII123Qh2BE37z1a7wR
+      91cJI485q43HOttWRR/vxPQVBKNMEn+j6DWqCLICJGWLO5ct9EyMCTzP/wB3AjOw
+      6KLlidOFL9sinUeHKy+s6GLZ8sffIgFDV+MAI7T6tIVrJI6ieYP4DXcQuwAL3Cae
+      XlsfBek0Q8By4DQiPka5Nqb9UKA+ie9wmSQfhY2mg2jyrDg5cKnvy+7ijbqc15bF
+      NWYJ1IFcGkUb0janos1TybPitbAUmS/Q3tRcd42eh8PCNIBi9kdflOpolmWQkH4V
+      LcdZS4iP2PgF+wPrr2dlw/V8LdLL23zRbUypEoNmgluPIZHZPV7KajEBYgTGNkOx
+      068CXjrSA/qGdS9einzP32eRRPKSTTbAsFbLxUKZ+Gd9z0hgV2uhC5H+SkOaxFWt
+      aCYwNIXDI4uSXmdT7tdEy/zByWjIlMsI0qhR02TI2MerHpTT1FuYQkOX+q/j5ky1
+      omhunUqPiyb5yTsv8R8dFz49iwIDAQABo2AwXjAPBgNVHRMBAf8EBTADAQH/MB8G
+      A1UdIwQYMBaAFJDS6o1jiMmZoHkd3hF/zVIUQ/HWMB0GA1UdDgQWBBSQ0uqNY4jJ
+      maB5Hd4Rf81SFEPx1jALBgNVHQ8EBAMCAQYwDQYJKoZIhvcNAQELBQADggIBAAMm
+      5y2gCpeFshC9nZYTABW0/A+eTuJr3t9fUecsaBIz9gVuhoRNLvXnZj6NYqW/RtwY
+      pfuHIKSwCQJnEi7cpr87UwiFbEfBBEL1zPZznSMT1Ts4+gORBRvWHlepZls28xK8
+      ehB+E4YvLI8gUfPc+stm4lOeH6olmW37i183tNBrIfWjFuXq6soswXW3syAhphrQ
+      t4v5jWdcskQDOW9D5zXWI/bId+LcLkTHqSEBOM5a89GIDpavHNneAArxF4gx3wiv
+      B4JsPo0+5vztY/4AM3h6RbCyCrESaofSS9JHeEOQoOzOApdClM7dGrdvAXGyyOn7
+      btIyyXv3rQ7IPkCEAK5gFxqmxfHGN/ldeBaH/FFtwPywXUyU0rXuwopvt4u7RYaQ
+      uE37jGTpgO5/jukVcdyF+K9Zi5nEBStBQ8FJA2Xohej2dv2jyDRKfD8cAPiZ0YR8
+      xYwuzvWIf6pMod3DOS8Z0GN5hMP3/6ZCMy2S4BbkGFdkR86a9Cn+8LP6BEK0DiY+
+      T+Mj4kYGNO5sj0A1gzLtcp4JF8gMGv6BtWUYUkz5fIh/HbeOroggQNBEJ/g+rpnw
+      brJBNtWMpLQMzVAV6wzWjiJu9TmeGLjgjCMeNPoWbODYxA7MzhRDUXKY8h+fZE2F
+      fcKnnsin+OmoUXPsBJg3CmYI4OxgQ1nyyQcs5xNx
+      -----END CERTIFICATE-----
+
+  daemonset:
+    extraVolumes:
+      - name: rke2-audit-log
+        hostPath:
+          path: /var/lib/rancher/rke2/server/logs/
+
+    extraVolumeMounts:
+      - name: filebeat-config
+        mountPath: /usr/share/filebeat/modules.d/system.yml
+        readOnly: true
+        subPath: system.yml
+      # Auto mount
+      # - name: filebeat-config
+      #   mountPath: /usr/share/filebeat/ca-certificates.txt
+      #   readOnly: true
+      #   subPath: ca-certificates.txt
+      - name: rke2-audit-log
+        mountPath: /var/lib/rancher/rke2/server/logs/
+        readOnly: true
+
+    securityContext:
+      runAsUser: 0
+      privileged: false
+
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "100Mi"
+      limits:
+        cpu: "2000m"
+        memory: "2000Mi"
+
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      effect: NoSchedule
+
+  # hostAliases:
+  #   - ip: "10.0.2.14"
+  #     hostnames:
+  #       - "elk-node"
+
+  extraEnvs:
+    - name: ELASTICSEARCH_HOSTS
+      value: ovng-wazuh-elasticsearch-headless:9200
+
+    - name: 'ELASTICSEARCH_USERNAME'
+      value: "fluentd"
+
+    - name: 'ELASTICSEARCH_PASSWORD'
+      value: "vgY9VsYGX45EPWdQ"
+
+# Falco
+# https://github.com/falcosecurity/charts/tree/master/falco
+falco:
+  enabled: true
+
+  image:
+    repository: falcosecurity/falco-no-driver
+
+  falco:
+    grpc:
+      enabled: true
+      unixSocketPath: "unix:///var/run/falco/falco.sock"
+    grpcOutput:
+      enabled: true
+
+  extraInitContainers:
+    - name: driver-loader
+      image: docker.io/falcosecurity/falco-driver-loader:0.29.0
+      imagePullPolicy: Always
+      volumeMounts:
+        - mountPath: /host/proc
+          name: proc-fs
+          readOnly: true
+        - mountPath: /host/boot
+          name: boot-fs
+          readOnly: true
+        - mountPath: /host/lib/modules
+          name: lib-modules
+        - mountPath: /host/usr
+          name: usr-fs
+          readOnly: true
+        - mountPath: /host/etc
+          name: etc-fs
+          readOnly: true
+        - mountPath: /root/.falco
+          name: driver-fs
+      env:
+        - name: FALCO_BPF_PROBE
+          value:
+
+  extraVolumes:
+    - name: driver-fs
+      emptyDir: {}
+
+  extraVolumeMounts:
+    - mountPath: /root/.falco
+      name: driver-fs
+
+  ebpf:
+    enabled: true
+
+  customRules:
+    ovng_shell_demo_rule.yaml: |-
+      - macro: container
+        condition: container.id != host
+
+      - macro: spawned_process
+        condition: evt.type = execve and evt.dir=<
+
+      - rule: run_shell_in_container
+        desc: a shell was spawned by a non-shell program in a container. Container entrypoints are excluded.
+        condition: container and proc.name = bash and spawned_process and proc.pname exists and not proc.pname in (bash, docker)
+        output: "Shell spawned in a container other than entrypoint (user=%user.name container_id=%container.id container_name=%container.name shell=%proc.name parent=%proc.pname cmdline=%proc.cmdline)"
+        priority: WARNING
+
+    ovng_rootkit_demo_rule.yaml: |-
+      - rule: create_files_below_dev
+        desc: creating any files below /dev other than known programs that manage devices. Some rootkits hide files in /dev.
+        condition: (evt.type = creat or evt.arg.flags contains O_CREAT) and proc.name != blkid and fd.directory = /dev and fd.name != /dev/null
+        output: "File created below /dev by untrusted program (user=%user.name command=%proc.cmdline file=%fd.name)"
+        priority: WARNING
+
+
+# Falco Exporter
+# https://github.com/falcosecurity/charts/tree/master/falco-exporter
+falco-exporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    additionalLabels:
+      release: prod-us-prometheus
+  grafanaDashboard:
+    enabled: false
+    namespace: monitoring
