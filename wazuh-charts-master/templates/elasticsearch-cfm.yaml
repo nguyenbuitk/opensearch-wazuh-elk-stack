@@ -208,6 +208,7 @@ data:
           - 'k8s-*'
           - 'actserver-*'
           - 'vpn-*'
+          - 'mongodb-*'
           allowed_actions:
           - "crud"
           - "create_index"
@@ -231,6 +232,7 @@ data:
           - 'k8s-*'
           - 'actserver-*'
           - 'vpn-*'
+          - 'mongodb-*'
           allowed_actions:
           - "read"
       tenant_permissions:

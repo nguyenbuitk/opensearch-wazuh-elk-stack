@@ -118,7 +118,7 @@ filebeat:
           # Filebeat will choose the paths depending on your OS.
           #var.paths:
 
-    testca-certificates.txt: |
+    ca-certificates.txt: |
       -----BEGIN CERTIFICATE-----
       MIIE+jCCAuKgAwIBAgIEX9BztDANBgkqhkiG9w0BAQsFADAOMQwwCgYDVQQDDANl
       bGswHhcNMjAxMjA5MDY1MDI4WhcNMzAxMjA5MDY1MDI4WjAOMQwwCgYDVQQDDANl

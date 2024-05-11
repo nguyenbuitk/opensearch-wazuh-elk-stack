@@ -1,0 +1,15 @@
+dependencies:
+- name: logstash
+  repository: https://helm.elastic.co
+  version: 7.17.3
+- name: filebeat
+  repository: https://helm.elastic.co
+  version: 7.12.1
+- name: falco
+  repository: https://falcosecurity.github.io/charts
+  version: 1.15.7
+- name: falco-exporter
+  repository: https://falcosecurity.github.io/charts
+  version: 0.5.2
+digest: sha256:462c86fca8bb299318bff2c28ba3d5445ed5a1d6d1aacb6727212131ba7c2b22
+generated: "2024-05-08T03:38:35.215675631Z"
