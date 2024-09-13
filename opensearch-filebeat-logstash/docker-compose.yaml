@@ -1,0 +1,47 @@
+version: '3.8'
+services:
+    opensearch-node1:
+        image: repo.myovcloud.com:5000/devops/opensearch-s3-repo:2.16
+        container_name: opensearch-node1
+        environment:
+            - cluster.name=opensearch-cluster
+            - node.name=opensearch-node1
+            - discovery.seed_hosts=opensearch-node
+            - bootstrap.memory_lock=true
+            - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+            - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=Omnivista@123"
+            - plugins.security.disabled=false
+            - plugins.security.ssl.http.enabled=false
+            - discovery.type=single-node
+            - network.host=0.0.0.0
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+        volumes:
+            - opensearch-data1:/usr/share/opensearch/data
+        ports:
+            - 9200:9200
+            - 9600:9600
+        networks:
+            - opensearch-net
+
+    opensearch-dashboards:
+        image: opensearchproject/opensearch-dashboards:2.16.0
+        container_name: opensearch-dashboards
+        environment:
+            OPENSEARCH_HOSTS: '["http://opensearch-node1:9200"]'
+        ports:
+            - 5601:5601
+        networks:
+            - opensearch-net
+        depends_on:
+            - opensearch-node1
+
+volumes:
+    opensearch-data1:
+        driver: local
+networks:
+    opensearch-net:
+        driver: bridge
+
